@@ -5,32 +5,47 @@ description: Use whenever you write or edit a Modelica model that contains compo
 
 # Making models visible in the OMEdit diagram
 
-A component **without a `Placement` annotation doesn't appear in the OMEdit diagram view**, even if the model simulates. Every component instance (and every top-level connector) needs one. `openmodelica_diagram_check` enforces this.
+A component **without a `Placement` annotation doesn't appear in the OMEdit diagram view**,
+even if the model simulates. Every component instance (and every top-level connector) needs
+one. `openmodelica_diagram_check` enforces this.
 
 ## Placement (component position)
 ```modelica
 Modelica.Mechanics.MultiBody.Joints.Revolute rev(n = {0, 0, 1}, useAxisFlange = true)
   annotation(Placement(transformation(extent = {{-20, -10}, {0, 10}})));
 ```
-- `extent = {{x1, y1}, {x2, y2}}` in diagram coordinates. The default diagram area is `{{-100,-100},{100,100}}`.
-- Standard component size: **20 × 20** (e.g. `{{-10,-10},{10,10}}` shifted). Put all extents on a **10-unit grid**.
-- Rotate: `Placement(transformation(extent = {{-10,-10},{10,10}}, rotation = 90, origin = {40, 20}))` (extent relative to origin).
-- Horizontal flip: swap x: `extent = {{10,-10},{-10,10}}`. Vertical flip: swap y.
-- For a larger canvas, add this to the model annotation: `annotation(Diagram(coordinateSystem(extent = {{-200,-100},{200,100}})))`.
+- `extent = {{x1, y1}, {x2, y2}}` in diagram coordinates. Default diagram area is
+  `{{-100,-100},{100,100}}`. Put all extents on a **10-unit grid**.
+- Standard component size: **20 × 20** (e.g. `{{-10,-10},{10,10}}` shifted).
+- Rotate: `Placement(transformation(extent = {{-10,-10},{10,10}}, rotation = 90, origin = {40, 20}))`.
+  **Transform order is extent → rotation → origin, and rotation is counter-clockwise about
+  `{0,0}`** (not about `origin`). So keep the extent centred on the origin and put the
+  position in `origin` — do not bake position into the extent and also set `origin`.
+- Horizontal flip: swap x in extent (`{{10,-10},{-10,10}}`). Vertical flip: swap y.
+- Larger canvas: add to the model annotation
+  `annotation(Diagram(coordinateSystem(extent = {{-200,-100},{200,100}})))`.
 
 ## Line (connection route)
 ```modelica
 connect(world.frame_b, rev.frame_a)
   annotation(Line(points = {{-40, 0}, {-20, 0}}, color = {95, 95, 95}, thickness = 0.5));
 ```
-- `points` run from the first connector's position to the second one, with orthogonal elbows (`{{0,40},{0,20},{-10,20},{-10,10}}`).
-- Conventional colors: signals `{0,0,127}`, electrical `{0,0,255}`, rotational/translational `{0,0,0}`, MultiBody frames `{95,95,95}` with `thickness=0.5`, heat `{191,0,0}`, fluid `{0,127,255}`.
-- Lines are optional for OMEdit (it draws straight lines), but they make the diagram readable. Always add them.
+- `points` run from the first connector's position to the second, with orthogonal elbows
+  (`{{0,40},{0,20},{-10,20},{-10,10}}`).
+- Conventional colors: signals `{0,0,127}`, electrical `{0,0,255}`, rotational/translational
+  `{0,0,0}`, MultiBody frames `{95,95,95}` with `thickness=0.5`, heat `{191,0,0}`, fluid `{0,127,255}`.
+- Optional `Line` extras: `pattern=LinePattern.Solid|Dash|Dot`, `smooth=Smooth.None|Bezier`,
+  `arrow={Arrow.None,...}` (arrowheads). Defaults are solid/none; add arrows only for signal
+  direction where it helps.
+- Lines are optional for OMEdit (it draws straight lines), but always add them for readability.
 
 ## Layout convention (use it every time)
-- Left → right = cause → effect: **sources/commands (x ≈ -80…-60) → controllers (-40…-20) → actuators / plant (0…40) → sensors / loads (60…80)**.
-- Feedback paths go **below** the forward path (y ≈ -40…-60), and reference or setpoint blocks go **above** (y ≈ 40…60).
-- MultiBody: `world` at the far left (x=-80). Mechanical chains run left→right. Parallel loop branches go in stacked rows.
+- Left → right = cause → effect: **sources/commands (x ≈ -80…-60) → controllers (-40…-20) →
+  actuators / plant (0…40) → sensors / loads (60…80)**.
+- Feedback paths go **below** the forward path (y ≈ -40…-60); reference/setpoint blocks go
+  **above** (y ≈ 40…60).
+- MultiBody: `world` at the far left (x=-80). Mechanical chains run left→right. Parallel
+  loop branches go in stacked rows.
 - 20 units of space between neighbouring components. Don't let lines cross components.
 - **Copy the layout of the closest MSL example**: `get_class_source(<example>)` shows its Placements and Lines.
 
@@ -48,8 +63,12 @@ model LumpedActuator "Double-acting hydraulic cylinder (lumped)"
     Text(extent = {{-150,90},{150,50}}, textString = "%name", textColor = {0,0,255})}));
 end LumpedActuator;
 ```
-- Inheriting from MSL partials (`PartialCompliant`, `Electrical.Analog.Interfaces.OnePort`, `Rotational.Interfaces.PartialTwoFlanges`, `Blocks.Interfaces.SISO`) gives you correctly placed connectors for free.
+- Inherit MSL partials (`PartialCompliant`, `Electrical.Analog.Interfaces.OnePort`,
+  `Rotational.Interfaces.PartialTwoFlanges`, `Blocks.Interfaces.SISO`) for correctly-placed connectors for free.
 - `%name` shows the instance name under the icon.
+
+Full annotation syntax (coordinate systems, primitives, `Line`/`Placement` fields):
+`references/annotation-syntax.md`. Sources: `references/sources.md`.
 
 ## Checklist before handing back
 1. Every component and top-level connector has a `Placement`.
