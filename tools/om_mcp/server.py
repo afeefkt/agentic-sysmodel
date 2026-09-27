@@ -21,6 +21,7 @@ from omagent import (OMSession, expect_bounds, expect_final, expect_value_at,
 
 import analysis
 import library
+import cad
 
 PROJECT_ROOT = Path(os.environ.get(
     "SYSMODEL_ROOT", Path(__file__).resolve().parents[2])).resolve()
@@ -419,6 +420,38 @@ def frequency_analysis(lin_file: str, input: str, output: str,
         bode_path=_abs(bode_out_path) if bode_out_path else None)
     if "bode_png" in res:
         res["bode_png"] = str(Path(res["bode_png"]).relative_to(PROJECT_ROOT))
+    return res
+
+
+# --------------------------------------------------------- CAD -> Modelica --
+@mcp.tool()
+def cad_body_parameters(mass_properties_json: str, body: str, pivot_joint: str,
+                        axes_map: dict[str, str],
+                        next_joint: Optional[str] = None) -> dict:
+    """Exact BodyShape/Body parameters from CAD/mass_properties.json, expressed
+    in the Modelica body frame (frame_a at `pivot_joint`). axes_map says where
+    each CAD axis points in the model, e.g. {"x": "-y", "y": "x", "z": "z"}
+    (CAD bar along +x, model arm hanging along -y, pivot axis z). Returns m,
+    r_CM, I_11..I_32 (rotated), r (to next_joint) and a ready modifier string.
+    ALWAYS use this instead of converting CAD numbers by hand."""
+    return cad.body_parameters_from_file(
+        _abs(mass_properties_json), body=body, pivot_joint=pivot_joint,
+        axes_map=axes_map, next_joint=next_joint)
+
+
+@mcp.tool()
+def cad_import_shape(stl_path: str, package_dir: str, body: str,
+                     pivot: list[float], axes_map: dict[str, str],
+                     scale: float = 0.001) -> dict:
+    """Bring a CAD STL (binary or ASCII, CAD frame, usually mm) into the model
+    for OMEdit 3D animation: shifts by -pivot (same units as the STL), rotates
+    with axes_map (same as cad_body_parameters), scales to metres and writes
+    an ASCII STL to <package_dir>/Resources/Shapes/<body>.stl. Returns the
+    modelica:// URI and a FixedShape declaration to connect to the body's
+    frame_a. Geometry is visual only; physics uses cad_body_parameters."""
+    res = cad.import_shape(_abs(stl_path), _abs(package_dir), body, pivot,
+                           axes_map, scale)
+    res["file"] = str(Path(res["file"]).relative_to(PROJECT_ROOT))
     return res
 
 

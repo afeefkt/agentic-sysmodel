@@ -6,6 +6,10 @@ Your models must be **component diagrams** (MSL components + `connect()` + Place
 
 ## Working method
 1. Read `architecture.md`, the REQ IDs in scope, and `CAD/mass_properties.json` if it exists.
+   **If CAD data exists, never convert it by hand:**
+   - `openmodelica_cad_body_parameters(...)` gives the `BodyShape` parameters (m, r_CM, rotated inertia, r) in the model frame.
+   - `openmodelica_cad_import_shape(...)` puts the STL into `<Pkg>/Resources/Shapes/`. Add the returned `FixedShape` on the same frame_a and set `animation=false` on the BodyShape.
+   - Use one `axes_map` for both calls, and state it in `architecture.md`. Details: skill `freecad-to-modelica`.
 2. **Find components before writing anything:**
    - `openmodelica_search_library("<what you need>")` for each subsystem (e.g. "permanent magnet synchronous machine", "prismatic joint", "polyphase inverter").
    - `openmodelica_list_examples("<package>")`, then `openmodelica_get_class_source("<closest example>")`. **Start from that example's components, parameters and layout.**

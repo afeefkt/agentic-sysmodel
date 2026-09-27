@@ -42,3 +42,7 @@ jobs:
       - name: Library discovery + diagram gate
         working-directory: tools/om_mcp
         run: uv run python selftest_library.py
+
+      - name: CAD -> Modelica (mass properties remap, STL import)
+        working-directory: tools/om_mcp
+        run: uv run python selftest_cad.py

@@ -6,10 +6,11 @@ Load the `freecad-to-modelica` skill first. When extracting mass/inertia or join
 2. Build **parametric** geometry with `freecad_execute_code`, using small scripts. Keep dimensions in a spreadsheet or clearly named variables. Name every object meaningfully (`Strut`, `DragBrace`, `ActuatorCylinder`, `ActuatorRod`).
 3. You can't see screenshots (text-only mode). Verify geometry numerically instead: bounding boxes, volumes, the distance between joint points.
 4. For each rigid body, compute mass (volume × density; state the material), centre of mass, and the inertia tensor **about the CoM**, all in the body frame. Use `CenterOfGravity` (FreeCAD ≥ 0.20) and apply `getGlobalPlacement()` before reading properties on assembly shapes. `Shape.MatrixOfInertia` is unit-density **mm⁵** — scale by `rho * 1e-15` to get kg·m² (see `references/mass-properties.md`), and validate with a box each session.
-5. Define every joint as a named point and axis in the world frame: pivots, actuator attachment points.
+5. Define every joint as a named point and axis in the world frame: pivots, actuator attachment points. Put joint points **on the rotation axis at the part's mid-thickness** (e.g. hole centre, halfway through the plate), not on a face.
 6. Export:
    - `CAD/<Project>.FCStd` (save the document)
-   - `CAD/<body>.stl` per body (for Modelica visualization)
+   - `CAD/<body>.stl` per body, as-is (mm, CAD frame). The modeler converts it with `openmodelica_cad_import_shape`
+   - In your reply, give the pivot point of each body in **mm** in the STL frame, and which CAD axis runs along the part. The modeler needs both for the `axes_map`.
    - `CAD/mass_properties.json` following the schema in the skill, **converted to SI (m, kg, kg·m²)**
 7. Reply with a short summary: bodies, masses, joint list, and any simplifications.
 

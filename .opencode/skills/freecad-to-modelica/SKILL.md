@@ -65,7 +65,15 @@ Full detail: `references/mass-properties.md` (semantics, conversion, tensor rota
 }
 ```
 
-## Mapping to Modelica (frame_a at the body's primary joint, axes parallel to world)
+## Use the deterministic tools (don't convert by hand)
+The modeler never converts CAD numbers manually. Two MCP tools do it exactly:
+- `openmodelica_cad_body_parameters(mass_properties_json, body, pivot_joint, axes_map, next_joint?)` returns `m`, `r_CM`, `I_11…I_32` (rotated into the model frame), `r`, and a ready modifier string for `BodyShape`.
+- `openmodelica_cad_import_shape(stl_path, package_dir, body, pivot, axes_map)` turns the binary or mm STL into an **ASCII STL in metres, in frame_a coordinates**, at `<Pkg>/Resources/Shapes/<body>.stl`, and returns the `modelica://` URI plus a `FixedShape` declaration. `pivot` is in STL units (mm).
+- **`axes_map`** says where each CAD axis points in the model, e.g. `{"x":"-y","y":"x","z":"z"}` for a bar modelled along CAD +x that hangs along model −y. Use the **same** map for both tools. The tool rejects maps that aren't proper rotations.
+- In the model: `BodyShape(..., animation=false)` for the physics, plus the `FixedShape` connected to the **same frame_a** for the looks. OMEdit: *Simulate with Animation*.
+- Modelica (unlike Simscape's File Solid) never derives inertia from geometry. The STL is visual only, and mass properties always come from FreeCAD via the JSON. Put joint points at the **mid-thickness** of the part (on the rotation axis) so CoM offsets come out right.
+
+## Mapping to Modelica (reference: what the tools compute; frame_a at the body's primary joint)
 - `BodyShape.r    = joint_next.point - joint_primary.point`  (frame_a → frame_b)
 - `BodyShape.r_CM = body.com - joint_primary.point`          (frame_a → CoM)
 - `BodyShape.m    = body.mass`
@@ -87,9 +95,8 @@ Read the joint type from the object type and the axis/position from the offsets;
 import Mesh
 Mesh.export([doc.getObject("Strut")], "/path/to/CAD/Strut.stl")
 ```
-- STL is dimensionless; FreeCAD assumes the model is in **mm**. `BodyShape`/`Visualizers.Advanced.Shape` assumes external shape files are in **metres** and in **frame_a** coordinates.
-- Fix the mm→m mismatch either by scaling the mesh ×1e-3 before export (`Draft.scale`) or by letting Modelica scale: `shapeType="modelica://<Pkg>/Resources/part.stl"` with `extra=1` (uses the body's `length/width/height`). Simplest: scale in FreeCAD and pre-translate so the STL origin sits at `frame_a`.
-- Full procedure and pitfalls: `references/stl-animation.md`.
+- Export the STL as-is from FreeCAD (mm, CAD frame, binary is fine). Then `openmodelica_cad_import_shape` does the scaling, the translation to the pivot, the rotation, and the ASCII conversion (OMEdit can't read binary STL).
+- Full procedure and pitfalls: `references/stl-animation.md`. Worked example: `Example/ServoArm` (`ServoArm.Plant.armShape`).
 
 ## Rules
 - Save the document (`doc.saveAs(...)`) to `Example/<Project>/CAD/<Project>.FCStd`.

@@ -1,39 +1,60 @@
 {
   "$schema": "https://opencode.ai/config.json",
-
   "provider": {
     "deepseek": {
       "models": {
-        "deepseek-flash":  { "name": "DeepSeek Flash",   "limit": { "context": 1000000, "output": 32000 } },
-        "deepseek-v4-pro": { "name": "DeepSeek V4 Pro",  "limit": { "context": 1000000, "output": 32000 } }
+        "deepseek-flash": {
+          "name": "DeepSeek Flash",
+          "limit": {
+            "context": 1000000,
+            "output": 32000
+          }
+        },
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "limit": {
+            "context": 1000000,
+            "output": 32000
+          }
+        }
       }
     }
   },
-
   "model": "deepseek/deepseek-v4-pro",
   "small_model": "deepseek/deepseek-flash",
   "default_agent": "sysarch",
-
   "mcp": {
     "freecad": {
       "type": "local",
-      "command": ["uv", "run", "--directory", "../external/freecad-mcp", "freecad-mcp", "--only-text-feedback"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        "../external/freecad-mcp",
+        "freecad-mcp",
+        "--only-text-feedback"
+      ],
       "enabled": true,
       "timeout": 60000
     },
     "openmodelica": {
       "type": "local",
-      "command": ["uv", "run", "--directory", "tools/om_mcp", "python", "server.py"],
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        "tools/om_mcp",
+        "python",
+        "server.py"
+      ],
       "enabled": true,
       "timeout": 60000
     }
   },
-
   "tools": {
     "freecad_*": false,
     "openmodelica_*": false
   },
-
   "agent": {
     "sysarch": {
       "description": "System architect and orchestrator. Plans the modeling project, delegates to subagents, tracks requirements-to-evidence state. Start here.",
@@ -46,29 +67,41 @@
         "openmodelica_search_library": true,
         "openmodelica_list_examples": true
       },
-      "permission": { "edit": "allow", "bash": "ask" }
+      "permission": {
+        "edit": "allow",
+        "bash": "ask"
+      }
     },
-
     "req-engineer": {
       "description": "Turns a system need into measurable, verifiable requirements (requirements.yaml with REQ IDs, acceptance criteria, verification cases).",
       "mode": "subagent",
       "model": "deepseek/deepseek-flash",
       "temperature": 0.3,
       "prompt": "{file:./agents/prompts/req-engineer.md}",
-      "tools": { "task": false },
-      "permission": { "edit": "allow", "bash": "deny" }
+      "tools": {
+        "task": false
+      },
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
     },
-
     "cad-designer": {
       "description": "Builds parametric parts/assemblies in FreeCAD via MCP and exports mass properties and joint frames (SI units) for Modelica.",
       "mode": "subagent",
       "model": "deepseek/deepseek-flash",
       "temperature": 0.3,
       "prompt": "{file:./agents/prompts/cad-designer.md}",
-      "tools": { "task": false, "freecad_*": true, "freecad_execute_code_headless": false },
-      "permission": { "edit": "allow", "bash": "deny" }
+      "tools": {
+        "task": false,
+        "freecad_*": true,
+        "freecad_execute_code_headless": false
+      },
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
     },
-
     "modelica-modeler": {
       "description": "Builds component-based Modelica models (MSL components wired with connect(), placed for the OMEdit diagram) from the architecture and CAD data; must pass check, smoke simulation and diagram_check before handing back.",
       "mode": "subagent",
@@ -85,11 +118,15 @@
         "openmodelica_diagram_check": true,
         "openmodelica_simulate": true,
         "openmodelica_list_variables": true,
-        "openmodelica_read_results": true
+        "openmodelica_read_results": true,
+        "openmodelica_cad_body_parameters": true,
+        "openmodelica_cad_import_shape": true
       },
-      "permission": { "edit": "allow", "bash": "deny" }
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
     },
-
     "design-tuner": {
       "description": "Sizes/tunes design PARAMETERS (never model structure) with simulation sweeps until requirements pass; logs every iteration.",
       "mode": "subagent",
@@ -104,9 +141,11 @@
         "openmodelica_verify": true,
         "openmodelica_list_variables": true
       },
-      "permission": { "edit": "allow", "bash": "deny" }
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
     },
-
     "sim-verifier": {
       "description": "Independent verification: runs nominal and edge-case simulations, evaluates every requirement, writes the PASS/FAIL verification report. Never edits models.",
       "mode": "subagent",
@@ -125,11 +164,14 @@
         "openmodelica_measure": true,
         "openmodelica_compare_cases": true,
         "openmodelica_plot": true,
-        "openmodelica_export_data": true
+        "openmodelica_export_data": true,
+        "openmodelica_cad_body_parameters": true
       },
-      "permission": { "edit": "allow", "bash": "deny" }
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
     },
-
     "control-expert": {
       "description": "Control systems engineer: designs controllers, sequencing/mode logic, limiters and filters in the Controls sub-package; uses linearization, stability margins and nonlinear metrics across edge cases. Never edits plant physics.",
       "mode": "subagent",
@@ -153,9 +195,11 @@
         "openmodelica_linearize": true,
         "openmodelica_frequency_analysis": true
       },
-      "permission": { "edit": "allow", "bash": "deny" }
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
     },
-
     "data-analyst": {
       "description": "Measures, compares, plots and exports existing simulation results on request (metrics like overshoot/settling/peak/rms, case comparison tables, PNG plots, CSV/Excel). Never simulates new designs or edits models.",
       "mode": "subagent",
@@ -172,7 +216,10 @@
         "openmodelica_plot": true,
         "openmodelica_export_data": true
       },
-      "permission": { "edit": "deny", "bash": "deny" }
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
     }
   }
 }
