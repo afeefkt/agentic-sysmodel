@@ -4,8 +4,8 @@ This project is an **integration layer**. It builds on the open-source work belo
 
 | Component | Used for | License | Source |
 |---|---|---|---|
-| **omagent** (Masoud Masoumi) | omc session wrapper, diagnostics parsing, result loading, verifiers, used by `tools/om_mcp` | BSD-3-Clause | https://github.com/MasoudMiM/omagent (pinned commit in `tools/om_mcp/pyproject.toml`) |
-| **freecad-mcp** (neka-nat) | MCP server + FreeCAD addon used by the `cad-designer` agent | MIT | https://github.com/neka-nat/freecad-mcp |
+| **omagent**, Copyright (c) 2026 Masoud Masoumi | omc session wrapper, diagnostics parsing, result loading, verifiers, used by `tools/om_mcp` (installed as a dependency, not copied into this repo) | BSD-3-Clause | https://github.com/MasoudMiM/omagent (pinned commit in `tools/om_mcp/pyproject.toml`) |
+| **freecad-mcp**, Copyright (c) 2025 Shirokuma (k tanaka) | MCP server + FreeCAD addon used by the `cad-designer` agent (cloned separately next to this repo, not copied into it) | MIT | https://github.com/neka-nat/freecad-mcp |
 | **OpenModelica** | Modelica compiler/simulator (`omc`), OMEdit | OSMC-PL / GPL / EPL (see openmodelica.org) | https://openmodelica.org |
 | **Modelica Standard Library 4.1.0** | component library; User's Guides extracted into `knowledge/msl/` (generated, not committed) | BSD-3-Clause, © Modelica Association | https://github.com/modelica/ModelicaStandardLibrary |
 | **OpenModelica User's Guide** | chapters fetched into `knowledge/web/omug-*` (generated, not committed); summarized in skills | CC BY 4.0, © Open Source Modelica Consortium | https://openmodelica.org/doc/OpenModelicaUsersGuide/latest/ |
