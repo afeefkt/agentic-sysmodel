@@ -1,0 +1,67 @@
+{
+  "units": "SI",
+  "reference_configuration": "single rigid arm, pivot hole at short-end side",
+  "world_axes": {
+    "x": "along the arm toward the tip (+X = 285 mm tip side)",
+    "y": "across the arm width (30 mm)",
+    "z": "rotation (pivot hole) axis, through the 10 mm thickness"
+  },
+  "bodies": {
+    "Arm": {
+      "material": "Al6061",
+      "density": 2700,
+      "mass": 0.24164283197364925,
+      "com": [
+        0.15075821691899943,
+        0.014999999999999998,
+        0.005
+      ],
+      "inertia_com": [
+        [
+          2.0233261594341686e-05,
+          8.046627044677735e-20,
+          4.0233135223388675e-20
+        ],
+        [
+          8.046627044677735e-20,
+          0.0017996349555665632,
+          -2.514570951461792e-21
+        ],
+        [
+          4.0233135223388675e-20,
+          -2.514570951461792e-21,
+          0.0018158408366280108
+        ]
+      ],
+      "I_about_length": 2.0233261594341686e-05,
+      "I_about_width": 0.0017996349555665632,
+      "I_about_thickness": 0.0018158408366280108,
+      "rotation_axis": "z",
+      "stl": "CAD/Arm.stl"
+    }
+  },
+  "joints": {
+    "armPivot": {
+      "type": "revolute",
+      "point": [
+        0.015,
+        0.015,
+        0.0
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "connects": [
+        "world",
+        "Arm"
+      ]
+    }
+  },
+  "notes": [
+    "Arm modelled as 300x30x10 mm bar with Dia8 on-axis pivot hole at 15 mm from short end.",
+    "CoM is toward the tip from pivot; rotation axis is Z.",
+    "STL is in mm (not scaled); origin = bar corner at (0,0,0)."
+  ]
+}

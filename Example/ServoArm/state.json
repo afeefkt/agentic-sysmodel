@@ -1,0 +1,42 @@
+{
+  "project": "Example/ServoArm",
+  "current_step": 9,
+  "step_name": "complete",
+  "iteration": 0,
+  "tuning_iterations": 1,
+  "status": "verified_all_pass",
+  "requirements": "Example/ServoArm/Requirements/requirements.yaml",
+  "architecture": "Example/ServoArm/architecture.md",
+  "plan": "Example/ServoArm/PLAN.md",
+  "design_point": {
+    "payload_m": 0.20, "Vsupply": 24.0, "R_a": 2.0, "L_a": 1.0e-3, "k_t": 0.05, "J_r": 5.0e-6, "N": 50,
+    "controller": {"type": "PID (D-on-error)", "kp": 60, "Ti": 0.08, "Td": 0.008, "Nd": 10}
+  },
+  "recent_delegations": [
+    {"agent": "req-engineer", "result": "requirements.yaml (REQ-01..06, 5 cases)"},
+    {"agent": "sysarch", "result": "architecture.md + PLAN.md"},
+    {"agent": "cad-designer", "result": "FreeCAD arm + mass_properties.json + Arm.stl; GATE <0.01%"},
+    {"agent": "modelica-modeler", "result": "Plant + SmokeTest; payload-position bug fixed"},
+    {"agent": "control-expert", "result": "PI controller + System + LoopCut (nominal margins ok)"},
+    {"agent": "sim-verifier", "result": "stage 6 run 1: REQ-01..05 25/25 PASS; found Vsupply override bug + REQ-06 worst PM FAIL"},
+    {"agent": "control-expert", "result": "retune PID (Td=0.008, wd=1) + Vsupply Evaluate=false fix; worst PM 48.6 deg PASS"},
+    {"agent": "sim-verifier", "result": "final: 25/25 PASS, plots + xlsx + report VERIFIED"},
+    {"agent": "data-analyst", "result": "5-case comparison table (rise/overshoot/settling/peak I/SS error)"}
+  ],
+  "open_issues": [
+    "OQ-1 friction/damping assumed 0 (real hardware adds damping -> margins would improve)",
+    "OQ-3 gear.N=50 chosen at tuned point; full 20..150 range not swept",
+    "OQ-5 REQ-05 sampled at t=3s (not true dc-gain)",
+    "OQ-7 hot_winding = R only (L, k held constant)",
+    "low_supply numerically identical to nominal (peak output ~7.5V, supply limit never engaged)"
+  ],
+  "stage_1_requirements": {"status": "done", "path": "Example/ServoArm/Requirements/requirements.yaml"},
+  "stage_2_architecture": {"status": "done", "path": "Example/ServoArm/architecture.md"},
+  "stage_3_cad": {"status": "done_gate_passed", "mass_kg": 0.2416428, "com_from_pivot_m": 0.1357582, "I_pivot_kg_m2": 6.26939e-3, "I_com_kg_m2": 1.81584e-3},
+  "stage_4_plant": {"status": "done", "model_path": "Example/ServoArm/OpenModelica/ServoArm/package.mo"},
+  "stage_5_control": {"status": "done", "gains": {"kp": 60, "Ti": 0.08, "Td": 0.008, "Nd": 10, "wd": 1}},
+  "stage_6_verify": {"status": "done_verified", "report": "Example/ServoArm/Results/verification_report.md", "result": "REQ-01..05 25/25 PASS; REQ-06 nominal 57.4deg/43.7dB + worst 48.6deg/49.2dB PASS"},
+  "stage_7_tune": {"status": "skipped_no_failures"},
+  "stage_8_compare": {"status": "done", "report": "Example/ServoArm/Results/comparison_table.md"},
+  "stage_9_summary": {"status": "done"}
+}

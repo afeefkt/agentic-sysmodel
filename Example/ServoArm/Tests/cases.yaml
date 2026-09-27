@@ -1,0 +1,16 @@
+# Verification cases — ServoArm.System (closed-loop position control, FINAL retuned PID)
+# Model under test: Example/ServoArm/OpenModelica/ServoArm/package.mo :: ServoArm.System
+# Design point (defaults): payload_m=0.20 kg, Vsupply=24 V, R_a=2.0 ohm, N=50
+# Controller: PID kp=60 V/rad, Ti=0.08 s, Td=0.008 s, Nd=10, D-on-error (wd=1)
+# Solver: dassl, tolerance=1e-6, number_of_intervals=500, stop_time=4.0 s
+# Model exposes phi (rad), i (A), v (V); requirements.yaml names arm.angle / motor.i -> phi / i.
+# Overrides use the actual top-level params: payload_m, Vsupply, R_a, N.
+cases:
+  nominal:       {overrides: {},                                        stop_time: 4.0, verifies: [REQ-01, REQ-02, REQ-03, REQ-04, REQ-05]}
+  heavy_payload: {overrides: {payload_m: 0.30},                         stop_time: 4.0, verifies: [REQ-01, REQ-02, REQ-03, REQ-04, REQ-05]}
+  low_supply:    {overrides: {Vsupply: 20.0},                           stop_time: 4.0, verifies: [REQ-01, REQ-02, REQ-03, REQ-04, REQ-05]}
+  hot_winding:   {overrides: {R_a: 2.6},                                stop_time: 4.0, verifies: [REQ-01, REQ-02, REQ-03, REQ-04, REQ-05]}
+  worst:         {overrides: {payload_m: 0.30, Vsupply: 20.0, R_a: 2.6}, stop_time: 4.0, verifies: [REQ-01, REQ-02, REQ-03, REQ-04, REQ-05]}
+# REQ-06 (stability margins) is a linear-analysis requirement; verified by control-expert
+# via openmodelica_linearize + frequency_analysis (see Results/control_design.md §5):
+# nominal PM 57.4 deg / GM 43.7 dB ; worst PM 48.6 deg / GM 49.2 dB.

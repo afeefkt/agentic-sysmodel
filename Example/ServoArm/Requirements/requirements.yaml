@@ -1,0 +1,310 @@
+# ===========================================================================
+# Requirements — ServoArm: geared DC-motor arm positioning (vertical plane)
+# System: 24 V DC motor + ideal gearbox drives an aluminium arm in a vertical
+# plane. Arm hangs at 0 deg (straight down) and must be moved to 90 deg
+# (horizontal) and held there carrying a tip payload.
+# Scope: closed-loop position control of the arm angle.
+# ===========================================================================
+
+system: ServoArm — geared DC-motor arm to horizontal (90 deg)
+model: Example/ServoArm/OpenModelica/ServoArm/package.mo (class TBD by modelica-modeler)
+description: >
+  A 24 V DC motor (MSL electrical machine built from MSL components) through an
+  ideal gearbox N:1 rotates an aluminium flat-bar arm in the vertical plane
+  against gravity. The arm points along -y from the pivot at angle 0 (hanging
+  straight down); rotation is about +z; +90 deg is the horizontal arm. A 0.20 kg
+  payload sits 280 mm from the pivot along the arm. A position controller
+  commands motor voltage (limited to +/-Vsupply) so the arm reaches 90 deg and
+  holds it. The gear ratio N is a design variable in [20, 150]; N = 50 is the
+  nominal point. No friction/damping is given; it is assumed zero (ASM-1/OQ-1).
+
+references:
+  - id: SRC-1
+    text: >
+      System need (task brief) — GIVEN DATA: Arm flat bar 300 x 30 x 10 mm,
+      Al 6061 (2700 kg/m^3), pivot hole dia 8 mm through the 10 mm thickness,
+      hole centre 15 mm from one end, pivot = hole centre, arm along -y at
+      0 deg, rotation about +z. Payload 0.20 kg point mass at 280 mm from pivot.
+      Motor: R = 2.0 ohm, L = 1.0e-3 H, k = 0.05 N*m/A (RotationalEMF), rotor
+      inertia 5e-6 kg*m^2. Gearbox: ideal gear, ratio N = 50 (design variable,
+      allowed 20..150). Supply: 24 V nominal; controller output limited to
+      +/-Vsupply. Move command at t = 0.1 s to 90 deg.
+
+# ---------------------------------------------------------------------------
+# Assumptions (ASSUMED vs SOURCED).
+# ---------------------------------------------------------------------------
+assumptions:
+  - id: ASM-1
+    text: >
+      All joint friction, viscous damping and gearbox losses are zero. The need
+      gives no friction/damping values, so zero is deliberately assumed
+      (see OQ-1). Consequence: no natural damping, so overshoot/settling must
+      come entirely from the control law and/or motor electrical damping.
+    status: ASSUMED
+  - id: ASM-2
+    text: >
+      The arm is a rigid uniform bar; the pivot hole is subtracted from the mass
+      but its (negligible) rotational inertia is neglected. Bar spans 15 mm on
+      the counterweight side of the pivot to 285 mm on the tip side; CoM at
+      0.1358 m from the pivot along the arm (DER-1).
+    status: SOURCED (SRC-1) with hole-negligibility simplification
+  - id: ASM-3
+    text: >
+      The payload is a rigid point mass attached at 280 mm along the arm and
+      rotates with it (I = m*r^2 about the pivot).
+    status: SOURCED (SRC-1)
+  - id: ASM-4
+    text: >
+      Gravity g = 9.81 m/s^2 along -y. The angle is measured from straight down
+      (0 deg) toward horizontal (90 deg) about +z; gravity torque
+      tau_g = M_tip*g*sin(angle), maximum at 90 deg.
+    status: SOURCED (SRC-1)
+  - id: ASM-5
+    text: >
+      Motor and gearbox are ideal: torque/back-EMF constant k = 0.05 N*m/A =
+      0.05 V*s/rad, no backlash, no compliance, 100 % gear efficiency, rotor
+      damping zero. Motor speed omega_m = N * arm angular rate.
+    status: ASSUMED (SRC-1 params, idealisation)
+  - id: ASM-6
+    text: >
+      A feedback position controller exists (design choice, not a requirement);
+      its output is the motor voltage, saturated to +/-Vsupply. REQ-06 is
+      evaluated on the loop cut at the motor-voltage input for the 90 deg
+      operating point.
+    status: ASSUMED
+  - id: ASM-7
+    text: >
+      The move command is a 90 deg step applied at t = 0.1 s; the arm is at rest
+      at 0 deg for t < 0.1 s. Simulation stop_time = 4.0 s for closed-loop
+      cases so REQ-03..REQ-05 can be evaluated.
+    status: SOURCED (SRC-1) + ASSUMED stop time
+  - id: ASM-8
+    text: >
+      Motor inductance L = 1.0e-3 H and resistance R = 2.0 ohm are constant;
+      winding temperature is not modelled except through the hot_winding case
+      override (R = 2.6 ohm), which represents a hot winding.
+    status: ASSUMED
+
+# ---------------------------------------------------------------------------
+# Proposed model interface (names the modeler must expose) and design
+# variables. Case overrides below use these top-level parameter names.
+# ---------------------------------------------------------------------------
+parameters:
+  payload.m:     {value: 0.20, unit: kg,  source: SRC-1}
+  Vsupply:       {value: 24.0, unit: V,   source: SRC-1}
+  motor.R:       {value: 2.0,  unit: ohm, source: SRC-1}
+  motor.L:       {value: 1.0e-3, unit: H, source: SRC-1}
+  motor.k:       {value: 0.05, unit: "N*m/A (and V*s/rad)", source: SRC-1}
+  motor.Jr:      {value: 5.0e-6, unit: "kg*m^2", source: SRC-1}
+  gear.N:        {value: 50,   unit: "-", source: "SRC-1 design variable, allowed 20..150"}
+  arm.m:         {value: 0.2416428, unit: kg, source: "derived from SRC-1 geometry (DER-1)"}
+  move.t_cmd:    {value: 0.1,  unit: s,   source: SRC-1}
+  angle_ref:     {value: 1.5707963, unit: rad, source: "90 deg SRC-1"}
+
+# ---------------------------------------------------------------------------
+# Derived quantities (closed-form from SOURCED parameters). Useful facts, not
+# independently imposed except where a requirement verifies them in the model.
+# ---------------------------------------------------------------------------
+derived:
+  - id: DER-1
+    text: >
+      Arm net mass and CoM. Bar volume = 0.300*0.030*0.010 = 9.0e-5 m^3; hole
+      volume = pi*(0.004)^2*0.010 = 5.0265e-7 m^3; net = 8.9497e-5 m^3.
+      m_arm = 2700*8.9497e-5 = 0.2416428 kg. CoM = 0.135759 m from the pivot
+      along the arm (full-bar CoM 0.135 m shifted by removing the on-pivot hole).
+    m_arm_kg: 0.2416428
+    com_m: 0.135759
+  - id: DER-2
+    text: >
+      Arm inertia about the pivot (parallel axis): I_arm = m*L^2/12 + m*d^2 with
+      m = 0.2416428 kg, L = 0.300 m, d = 0.135759 m -> 6.251e-3 kg*m^2.
+    I_arm_kg_m2: 6.251e-3
+  - id: DER-3
+    text: "Payload inertia about the pivot: I_pay = 0.20*0.280^2 = 0.01568 kg*m^2."
+    I_pay_kg_m2: 0.01568
+  - id: DER-4
+    text: "Total arm-side inertia about the pivot: I_arm_tot = DER-2 + DER-3 = 0.021931 kg*m^2."
+    I_arm_tot_kg_m2: 0.021931
+  - id: DER-5
+    text: >
+      Total inertia reflected to the motor shaft at N = 50:
+      J_tot = I_arm_tot/N^2 + J_r = 0.021931/2500 + 5e-6 = 1.3772e-5 kg*m^2.
+      (At N = 20: 5.98e-5; at N = 150: 5.975e-6 kg*m^2.)
+    J_tot_kg_m2_N50: 1.3772e-5
+    J_tot_kg_m2_N20: 5.98e-5
+    J_tot_kg_m2_N150: 5.975e-6
+  - id: DER-6
+    text: >
+      Gravity torque first moment: M_tip = m_arm*com + m_pay*r_pay =
+      0.2416428*0.135759 + 0.20*0.280 = 0.0888052 kg*m. tau_g(90 deg) =
+      M_tip*g = 0.871179 N*m at the arm = 0.017424 N*m at the motor (N = 50).
+    first_moment_kg_m: 0.0888052
+    tau_g_arm_Nm: 0.871179
+    tau_g_motor_Nm_N50: 0.017424
+  - id: DER-7
+    text: >
+      Static holding current at 90 deg (N = 50): i_hold = tau_g_motor/k =
+      0.017424/0.05 = 0.3485 A (well inside the 5 A ceiling, REQ-04).
+    i_hold_A_N50: 0.3485
+
+# ---------------------------------------------------------------------------
+# Requirements. One "shall" per REQ; each is numeric, mapped to an exposed
+# variable and verification cases. Verified by simulation unless noted.
+# Convention: angle in rad; time referenced to the move command at t = 0.1 s.
+# ---------------------------------------------------------------------------
+requirements:
+  - id: REQ-01
+    title: Arm reaches 89 deg within 1.0 s of the move command
+    statement: >
+      The arm shall reach 89 deg (1.5533430 rad) within 1.0 s measured from the
+      move command at t = 0.1 s (i.e. by t = 1.1 s).
+    rationale: Primary performance requirement from the need (SRC-1).
+    source: SRC-1
+    metric: arm.angle
+    criterion: {type: time_to_reach, var: arm.angle, threshold: 1.5533430, direction: rising, t_start: 0.1, max_time: 1.0}
+    criterion_note: "time_to_reach <= max_time = 1.0 s, where time is measured from t_start = 0.1 s."
+    verification: {method: simulation, cases: [nominal, heavy_payload, low_supply, hot_winding, worst]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-02
+    title: Overshoot <= 5 % of the 90 deg step
+    statement: >
+      The arm angle overshoot past the 90 deg (1.5707963 rad) setpoint shall not
+      exceed 5 % of the step, i.e. overshoot_pct <= 5 % and peak angle
+      <= 94.5 deg (1.6493361 rad).
+    rationale: Motion-envelope / settling requirement from the need (SRC-1).
+    source: SRC-1
+    metric: overshoot_pct
+    criterion: {type: overshoot, var: arm.angle, setpoint: 1.5707963, t_start: 0.1, limit_pct: 5.0}
+    verification: {method: simulation, cases: [nominal, heavy_payload, low_supply, hot_winding, worst]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-03
+    title: Arm held within 90 deg +/- 1 deg after t = 1.6 s
+    statement: >
+      From t = 1.6 s onward the arm angle shall stay within 90 deg +/- 1 deg,
+      i.e. in [1.5533430, 1.5882496] rad.
+    rationale: Holding accuracy once the move is complete (SRC-1).
+    source: SRC-1
+    metric: arm.angle
+    criterion: {type: bounds, var: arm.angle, lo: 1.5533430, hi: 1.5882496, after: 1.6}
+    verification: {method: simulation, cases: [nominal, heavy_payload, low_supply, hot_winding, worst]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-04
+    title: Motor current magnitude <= 5 A at all times
+    statement: >
+      The motor armature current magnitude shall not exceed 5 A at any time,
+      i.e. |motor.i| <= 5.0 A (equivalently -5.0 A <= motor.i <= 5.0 A).
+    rationale: Drive/thermal protection limit from the need (SRC-1).
+    source: SRC-1
+    metric: motor.i
+    criterion: {type: bounds, var: motor.i, lo: -5.0, hi: 5.0}
+    verification: {method: simulation, cases: [nominal, heavy_payload, low_supply, hot_winding, worst]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-05
+    title: Steady-state holding error <= 0.5 deg at t = 3 s
+    statement: >
+      At t = 3 s the arm angle shall satisfy |arm.angle - 90 deg| <= 0.5 deg
+      (motor voltage limited to +/-Vsupply, holding against gravity).
+    rationale: Static holding accuracy from the need (SRC-1).
+    source: SRC-1
+    metric: arm.angle
+    criterion: {type: value_at, var: arm.angle, t: 3.0, expected: 1.5707963, tol: 0.0087266}
+    verification: {method: simulation, cases: [nominal, heavy_payload, low_supply, hot_winding, worst]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-06
+    title: Position-loop stability margins at 90 deg
+    statement: >
+      Linearised at the 90 deg operating point, the open position loop shall
+      have phase margin >= 45 deg and gain margin >= 6 dB.
+    rationale: >
+      Stability robustness of the closed position loop from the need (SRC-1).
+      Evaluated by linearising the loop-cut model (motor-voltage input) and
+      computing Bode margins.
+    source: SRC-1
+    metric: loop.L
+    criterion: {type: margin, var: loop.L, phase_margin_deg_min: 45.0, gain_margin_db_min: 6.0}
+    verification: {method: analysis, cases: [nominal, worst]}
+    priority: must
+    status: not-verified
+
+# ---------------------------------------------------------------------------
+# Verification cases. Edge cases are explicit parameter overrides (top-level
+# parameter names from `parameters:` above), not prose. All are closed-loop
+# position moves; stop_time = 4.0 s suffices for REQ-03..REQ-05.
+# ---------------------------------------------------------------------------
+cases:
+  nominal:
+    overrides: {payload.m: 0.20, Vsupply: 24.0, motor.R: 2.0, gear.N: 50}
+    stop_time: 4.0
+    note: >
+      Nominal 90 deg move at t = 0.1 s. Verifies REQ-01..REQ-05; REQ-06 uses
+      this operating point. Default parameters: motor.L = 1e-3 H, k = 0.05,
+      Jr = 5e-6, arm mass/inertia from DER-1/DER-2.
+  heavy_payload:
+    overrides: {payload.m: 0.30, Vsupply: 24.0, motor.R: 2.0, gear.N: 50}
+    stop_time: 4.0
+    note: "EDGE: +50 % payload (0.30 kg) -> more gravity torque and inertia. Verifies REQ-01..REQ-05."
+  low_supply:
+    overrides: {payload.m: 0.20, Vsupply: 20.0, motor.R: 2.0, gear.N: 50}
+    stop_time: 4.0
+    note: "EDGE: -16.7 % supply (20 V) -> less voltage headroom and lower current ceiling. Verifies REQ-01..REQ-05."
+  hot_winding:
+    overrides: {payload.m: 0.20, Vsupply: 24.0, motor.R: 2.6, gear.N: 50}
+    stop_time: 4.0
+    note: "EDGE: hot winding R = 2.6 ohm (+30 %) -> higher voltage drop, slower current rise. Verifies REQ-01..REQ-05."
+  worst:
+    overrides: {payload.m: 0.30, Vsupply: 20.0, motor.R: 2.6, gear.N: 50}
+    stop_time: 4.0
+    note: "EDGE: combined worst case 0.30 kg + 20 V + 2.6 ohm. Verifies REQ-01..REQ-05 and REQ-06."
+
+# ---------------------------------------------------------------------------
+# Open questions for the design authority before the model is frozen.
+# ---------------------------------------------------------------------------
+open_questions:
+  - id: OQ-1
+    text: >
+      Friction/damping is not given. ASSUMED zero (ASM-1). This directly affects
+      overshoot (REQ-02) and settling (REQ-03); any real bearing/gear friction
+      would add damping. Confirm friction and gearbox efficiency, or confirm
+      zero is intended.
+  - id: OQ-2
+    text: >
+      Controller structure, gains and sample rate are unspecified (ASM-6).
+      REQ-01..REQ-05 assume some position loop exists; without one the arm
+      cannot be held. Confirm the controller is a design variable and that
+      +/-Vsupply saturation is the only actuator limit.
+  - id: OQ-3
+    text: >
+      Gear ratio N is a design variable in [20, 150]; all cases above use
+      N = 50. Confirm the value/range and whether the requirements must hold
+      across the whole range or only at the tuned design point.
+  - id: OQ-4
+    text: >
+      REQ-06 loop-cut definition: linearisation at the 90 deg operating point
+      requires a defined steady-state input (motor voltage/current) and a
+      defined cut point. Confirm the cut at motor voltage with the position
+      error as output.
+  - id: OQ-5
+    text: >
+      Steady-state criterion is sampled at t = 3 s only (REQ-05). Confirm this
+      is acceptable versus a true dc-gain / final-value definition, and confirm
+      the 0.5 deg tolerance includes any controller integral action.
+  - id: OQ-6
+    text: >
+      Pivot-hole mass removal and the 15 mm counterweight side of the bar are
+      included via ASM-2/DER-1. Confirm whether the hole and counterweight
+      overhang should be modelled explicitly in the CAD/MultiBody body.
+  - id: OQ-7
+    text: >
+      hot_winding models only R = 2.6 ohm. Confirm whether inductance and/or
+      torque constant k should also change with temperature, and whether motor
+      thermal limits (rather than the 5 A ceiling) are the binding constraint.
