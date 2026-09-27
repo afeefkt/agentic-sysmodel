@@ -1,0 +1,293 @@
+system: MiniRetraction retraction mechanism
+model: Example/MiniRetraction/OpenModelica/... (class TBD by modelica-modeler)
+description: >
+  A 0.5 m uniform 2 kg arm is hinged at the origin and hangs vertically down
+  (phi = 0 deg). A linear actuator is pinned to ground at (0.3, 0, 0) m and to
+  the arm 0.15 m below the hinge (measured along the arm). The actuator retracts
+  and swings the arm up 90 deg to horizontal (phi = 90 deg). Load case is gravity
+  only; no aerodynamics. The need specifies no friction, so friction is assumed
+  absent (see ASM-1).
+
+references:
+  - id: SRC-1
+    text: >
+      System need (task brief): arm L = 0.5 m, m = 2 kg uniform, hinge at
+      (0,0,0); ground anchor at (0.3,0,0) m; arm attachment 0.15 m along the arm
+      from the hinge; gravity-only load; retract 0 deg -> 90 deg.
+  - id: SRC-2
+    text: >
+      Constraint set (task brief): retraction time <= 3 s; actuator force
+      <= 500 N throughout; maximum arm angle <= 95 deg (overshoot <= 5 deg).
+
+# ---------------------------------------------------------------------------
+# Assumptions (label ASSUMED vs SOURCED). The task brief said "no friction is
+# specified" -- rather than silently choosing, it is stated here explicitly.
+# ---------------------------------------------------------------------------
+assumptions:
+  - id: ASM-1
+    text: >
+      All joints and the actuator are frictionless. The need specifies no
+      friction, so friction is deliberately assumed to be zero. Consequence:
+      there is no natural damping, so overshoot control must come from the
+      actuator command / control law (see OQ-6).
+    status: ASSUMED
+  - id: ASM-2
+    text: >
+      The arm is a uniform rigid rod (CoM at 0.25 m from the hinge, I_hinge =
+      m*L^2/3). Planar motion in the x-y plane; hinge axis is perpendicular to
+      that plane.
+    status: ASSUMED
+  - id: ASM-3
+    text: Actuator mass and inertia are neglected; only the 2 kg arm is modelled dynamically.
+    status: ASSUMED
+  - id: ASM-4
+    text: >
+      Gravity is 9.81 m/s^2 acting along -y, resisting the upward retraction.
+      The arm angle phi is measured such that phi = 0 is straight down and
+      phi = 90 deg is horizontal (+x).
+    status: SOURCED (SRC-1)
+  - id: ASM-5
+    text: >
+      Actuator technology is unspecified by the need. A hydraulic low-temperature
+      edge case (cold_fluid) is included conditionally and labelled ASSUMED; if
+      the actuator is electric this case is replaced by an equivalent low-
+      temperature force/torque degradation case (see OQ-1).
+    status: ASSUMED
+
+# ---------------------------------------------------------------------------
+# Derived (closed-form) quantities -- useful facts, not independently imposed
+# requirements except where a requirement below verifies them in the model.
+# ---------------------------------------------------------------------------
+derived:
+  - id: DER-1
+    text: "Actuator length vs arm angle: L(phi) = sqrt(0.1125 - 0.09*sin(phi)) m, with phi in rad."
+    value_at_phi_0_deg_m: 0.3354102
+    value_at_phi_90_deg_m: 0.1500000
+  - id: DER-2
+    text: "Actuator stroke over the swing: L(0 deg) - L(90 deg) = 0.1854102 m."
+    value_m: 0.1854102
+  - id: DER-3
+    text: "Centre of mass location: 0.25 m from the hinge (uniform 0.5 m, 2 kg rod)."
+    value_m: 0.25
+  - id: DER-4
+    text: "Arm inertia about the hinge: I = m*L^2/3 = 2*0.5^2/3 = 0.1666667 kg*m^2."
+    value_kg_m2: 0.1666667
+  - id: DER-5
+    text: "Static gravity torque about the hinge: tau_g = m*g*(L/2)*sin(phi) = 4.905*sin(phi) N*m; maximum 4.905 N*m at phi = 90 deg."
+    max_Nm: 4.905
+  - id: DER-6
+    text: "Maximum arm angle limit: 95 deg = 1.6580628 rad."
+
+# ---------------------------------------------------------------------------
+# Requirements
+# phase: step1_kinematics -> verifiable from geometry/kinematics alone in step 1
+# phase: later_dynamics  -> requires the dynamic simulation (time, force, overshoot)
+# ---------------------------------------------------------------------------
+requirements:
+  # ----------------------------- Kinematics --------------------------------
+  - id: REQ-KIN-1
+    title: Horizontal reach
+    statement: >
+      The arm shall rotate from phi = 0 deg (hanging down) to phi = 90 deg
+      (horizontal) when the actuator retracts through its full stroke.
+    rationale: >
+      This is the primary function of the mechanism (SRC-1): retract the arm to
+      horizontal. A 1 % relative tolerance on the final angle is allowed for the
+      kinematic/dynamic solution.
+    source: SRC-1
+    metric: arm.phi
+    criterion: {type: final, var: arm.phi, expected: 1.5707963, rtol: 0.01}
+    verification: {method: simulation, cases: [nominal], phase: step1_kinematics}
+    priority: must
+    status: not-verified
+
+  - id: REQ-KIN-2
+    title: Actuator extended length at phi = 0 deg
+    statement: >
+      The actuator length shall be 0.3354 m, within +/- 0.001 m, when the arm
+      hangs at phi = 0 deg.
+    rationale: >
+      Fixes the full-extension geometry of the actuator at the start of the
+      swing (DER-1). Ensures the model reproduces the intended pinned geometry.
+    source: SRC-1
+    metric: actuator.L
+    criterion: {type: value_at, var: actuator.L, t: 0.0, expected: 0.33541, tol: 1.0e-3}
+    verification: {method: simulation, cases: [nominal], phase: step1_kinematics}
+    priority: must
+    status: not-verified
+
+  - id: REQ-KIN-3
+    title: Actuator retracted length at phi = 90 deg
+    statement: >
+      The actuator length shall be 0.1500 m, within +/- 0.001 m, when the arm
+      reaches phi = 90 deg.
+    rationale: >
+      Fixes the fully-retracted geometry of the actuator at the end of the swing
+      (DER-1). Difference of the two end lengths defines the stroke.
+    source: SRC-1
+    metric: actuator.L
+    criterion: {type: final, var: actuator.L, expected: 0.15, rtol: 6.667e-3}
+    verification: {method: simulation, cases: [nominal], phase: step1_kinematics}
+    priority: must
+    status: not-verified
+
+  - id: REQ-KIN-4
+    title: Actuator stroke
+    statement: >
+      The actuator total stroke over the 0 deg -> 90 deg swing shall be
+      0.1854 m, within +/- 0.001 m.
+    rationale: >
+      The stroke is the sizing driver for the actuator (DER-2); the mechanism
+      must be able to command exactly this travel.
+    source: SRC-1
+    metric: actuator.stroke
+    criterion: {type: bounds, var: actuator.stroke, lo: 0.18441, hi: 0.18641}
+    verification: {method: simulation, cases: [nominal], phase: step1_kinematics}
+    priority: must
+    status: not-verified
+
+  - id: REQ-KIN-5
+    title: Closed-form length relation
+    statement: >
+      The actuator length shall satisfy the closed-form relation
+      L = sqrt(0.1125 - 0.09*sin(phi)) m within +/- 0.001 m throughout the swing.
+    rationale: >
+      Confirms the model's pinned-pinned geometry matches the intended kinematics
+      (DER-1) at every arm angle, not only at the endpoints. The modeller must
+      expose the residual variable actuator.L_residual = actuator.L -
+      sqrt(0.1125 - 0.09*sin(arm.phi)).
+    source: SRC-1
+    metric: actuator.L_residual
+    criterion: {type: bounds, var: actuator.L_residual, lo: -1.0e-3, hi: 1.0e-3}
+    verification: {method: simulation, cases: [nominal], phase: step1_kinematics}
+    priority: must
+    status: not-verified
+
+  # -------------------------- Performance / time ---------------------------
+  - id: REQ-T-1
+    title: Retraction time
+    statement: >
+      The arm shall complete the 0 deg -> 90 deg retraction within 3.0 s of the
+      retraction command.
+    rationale: >
+      Operational constraint (SRC-2). Verified in a later dynamics step, once
+      actuator force/power and control law exist.
+    source: SRC-2
+    metric: arm.phi
+    criterion: {type: time_to_reach, var: arm.phi, threshold: 1.5707963, direction: rising, max_time: 3.0}
+    verification:
+      method: simulation
+      cases: [nominal, heavy_arm, reduced_force, cold_fluid]
+      phase: later_dynamics
+    priority: must
+    status: not-verified
+
+  # ------------------------------- Force -----------------------------------
+  - id: REQ-F-1
+    title: Actuator force ceiling
+    statement: >
+      The actuator axial force magnitude shall not exceed 500 N at any time
+      during the retraction.
+    rationale: >
+      Actuator/structural sizing constraint (SRC-2). Reported as bounds on the
+      signed axial force; the model must use a consistent sign convention and
+      report |F| <= 500 N. Verified in a later dynamics step.
+    source: SRC-2
+    metric: actuator.F
+    criterion: {type: bounds, var: actuator.F, lo: -500.0, hi: 500.0}
+    verification:
+      method: simulation
+      cases: [nominal, heavy_arm, cold_fluid]
+      phase: later_dynamics
+    priority: must
+    status: not-verified
+
+  # ---------------------------- Motion limit -------------------------------
+  - id: REQ-OS-1
+    title: No overshoot beyond 95 degrees
+    statement: >
+      The arm angle shall not exceed 95 deg (1.6580628 rad) at any time, i.e.
+      overshoot past horizontal shall be no more than 5 deg.
+    rationale: >
+      Motion-limit constraint (SRC-2): a hard stop / envelope must not be
+      violated. Lower bound lo = 0 rad enforces monotonic upward motion (no
+      back-swing) since the arm starts at phi = 0. Verified in a later dynamics
+      step; with frictionless joints (ASM-1) this depends on the control law.
+    source: SRC-2
+    metric: arm.phi
+    criterion: {type: bounds, var: arm.phi, lo: 0.0, hi: 1.6580628}
+    verification:
+      method: simulation
+      cases: [nominal, heavy_arm, reduced_force]
+      phase: later_dynamics
+    priority: must
+    status: not-verified
+
+# ---------------------------------------------------------------------------
+# Verification cases. Edge cases are explicit parameter overrides, not prose.
+# `nominal` is used by every requirement; the dynamic requirements add the
+# edge cases listed against them above.
+# ---------------------------------------------------------------------------
+cases:
+  nominal:
+    overrides: {}
+    stop_time: 6
+    number_of_intervals: 3000
+    note: >
+      Arm L = 0.5 m, m = 2 kg, g = 9.81 m/s^2 along -y, frictionless
+      (ASM-1). Actuator commanded to retract the full stroke (0.1854 m);
+      model initial condition phi(start = 0, fixed = true).
+  heavy_arm:
+    overrides: {arm.m: 2.2}
+    stop_time: 6
+    number_of_intervals: 3000
+    note: "+10 % arm mass (2.2 kg); increases inertia and gravity torque by 10 %."
+  reduced_force:
+    overrides: {actuator.F_max: 450.0}
+    stop_time: 8
+    number_of_intervals: 4000
+    note: "-10 % available actuator force (450 N); margin case for REQ-T-1/REQ-OS-1."
+  cold_fluid:
+    overrides: {nu: 5.0e-4}
+    stop_time: 10
+    number_of_intervals: 4000
+    note: >
+      -40 degC kinematic viscosity 5.0e-4 m^2/s, ASSUMED; applies only if the
+      actuator is hydraulic (technology unspecified) -> OQ-1. If electric, use an
+      equivalent low-temperature force/torque degradation override instead.
+
+# ---------------------------------------------------------------------------
+# Open questions to resolve before/with the modelica-modeler and design-tuner.
+# ---------------------------------------------------------------------------
+open_questions:
+  - id: OQ-1
+    text: >
+      Actuator technology (electric vs hydraulic vs pneumatic) is unspecified.
+      This determines whether cold_fluid applies and how force varies with
+      temperature. Needs a decision from the design authority.
+  - id: OQ-2
+    text: >
+      Control law / command profile is unspecified. A full-stroke position
+      command with no damping on a frictionless mechanism (ASM-1) may produce
+      large overshoot. Is a controller (e.g. velocity or force limit) part of
+      the design space, or is the model open-loop?
+  - id: OQ-3
+    text: >
+      Actuator pin offsets are assumed to be exactly at (0.3,0,0) m on ground
+      and 0.15 m along the arm from the hinge. Confirm there are no joint
+      offsets/boss heights perpendicular to the plane.
+  - id: OQ-4
+    text: >
+      Tolerance on the final horizontal angle and the settling definition are
+      unspecified. Assumed 1 % on phi = 90 deg and "no further motion after the
+      3 s window". Confirm.
+  - id: OQ-5
+    text: >
+      "0.15 m below the hinge" is assumed to be measured along the arm axis
+      starting at the hinge point. Confirm this datum.
+  - id: OQ-6
+    text: >
+      With zero friction and no specified damping, overshoot is unbounded unless
+      the actuator command is rate/force limited. This is a design choice (how)
+      and is deliberately NOT written as a requirement; REQ-OS-1 states only the
+      what (max 95 deg).

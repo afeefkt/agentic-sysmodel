@@ -1,0 +1,373 @@
+# ===========================================================================
+# Tests/cases.yaml — DualThreePhaseMachine, Step 1 (core machine) verification
+# Owner: sim-verifier. Source requirements: Requirements/requirements.yaml
+# Step-1 scope: REQ-01..REQ-15 and REQ-26. REQ-16..REQ-25 = later steps (skipped).
+# ---------------------------------------------------------------------------
+# IMPORTANT — interface mapping
+# The Step-1 model is VOLTAGE-fed and exposes FLAT names:
+#   parameters : Rs, Ld, Lq, Ll, psi_pm, np, J, b, i_s_rated, m_rated,
+#                P_rated, neutral_config
+#   start par. : i_d_start, i_q_start, i_x_start, i_y_start, i_0_start,
+#                omega_mech_start, phi_k_start
+#   inputs     : u_d, u_q, u_x, u_y, u_0, m_load
+#   outputs    : i_d, i_q, i_x, i_y, i_0, psi_d, psi_q, omega_k, omega_mech,
+#                phi_k, m_e, P_mech
+#   residuals  : res_psi_d, res_psi_q, res_dq_d, res_dq_q, res_me, res_power
+# requirements.yaml uses `machine.*`, `mech.*`, `inv.*`, `vsd.*` (planned
+# Step-2/3 wrappers, not present in Step 1). Mapped here:
+#   machine.Rs..Ll -> Rs..Ll ; machine.psi_pm/np/i_s_rated/m_rated/P_rated -> flat
+#   machine.i_d/i_q (prescribed currents) -> i_d_start/i_q_start (+ voltage drive)
+#   machine.omega_mech -> omega_mech_start ; mech.m_load -> m_load
+# The numeric-override API cannot express (a) enumeration `neutral_config`
+# (string) nor (b) a true prescribed-current source, so cases needing those
+# use the additive harness package `DualThreePhaseMachine.Harnesses`
+# (Harnesses.mo; the model file DualThreePhaseIPMSM.mo was NOT modified).
+# ===========================================================================
+
+system: DualThreePhaseMachine Step-1 core machine
+model: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+top_class: DualThreePhaseMachine.DualThreePhaseIPMSM
+harness_package: DualThreePhaseMachine.Harnesses
+
+cases:
+
+  # --------------------------- acceptance gate -----------------------------
+  smoke:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {}
+    stop_time: 0.1
+    number_of_intervals: 100
+    note: "REQ-26: translation ok + short smoke run; final time = 0.1 s, states finite."
+
+  # ------------------------------ nominal ----------------------------------
+  nominal:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides:
+      i_d_start: -2.513
+      i_q_start: 5.0
+      omega_mech_start: 52.3599
+      u_d: -15.676
+      u_q: 28.899
+      m_load: 4.4981        # = m_e - b*omega_mech, holds the bench speed
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      Bench point (generator, 500 rpm): i_d=-2.513 A, i_q=5 A,
+      omega_mech=52.3599 rad/s, steady state. Verifies REQ-04, REQ-05, REQ-11,
+      REQ-12. (Voltage-fed realisation of the prescribed bench currents:
+      u_d=R_s*i_d-omega_k*psi_q=-15.676 V, u_q=R_s*i_q+omega_k*psi_d=28.899 V.)
+
+  open_loop_dq_step:
+    model: DualThreePhaseMachine.Harnesses.SpeedLocked
+    overrides: {}
+    stop_time: 0.2
+    number_of_intervals: 4000
+    note: >
+      REQ-06: omega_k=0, 1 V step on u_d and u_q, i(0)=0. Harness holds the
+      rotor at rest by balancing m_load = m_e (the raw free-rotor model
+      accelerates, see open_loop_dq_step_free below).
+
+  open_loop_dq_step_free:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {u_d: 1.0, u_q: 1.0, omega_mech_start: 0.0, i_d_start: 0.0, i_q_start: 0.0}
+    stop_time: 0.2
+    number_of_intervals: 4000
+    note: >
+      REQ-06 CONTROL: same voltages but free rotor -> rotor accelerates
+      (omega_mech -> 2.14 rad/s) and back-EMF corrupts i_q. Documents why a
+      mechanical speed hold is required; not a pass case.
+
+  xy_injection:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {omega_mech_start: 0.0, u_d: 0.0, u_q: 0.0, u_x: 1.0, u_y: 1.0}
+    stop_time: 0.05
+    number_of_intervals: 5000
+    note: "REQ-07: 1 V step on u_x,u_y only; dq/0 unexcited; rotor at rest (m_e=0)."
+
+  xy_injection_overspeed:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {omega_mech_start: 456.6, u_d: 0.0, u_q: 0.0, u_x: 1.0, u_y: 1.0}
+    stop_time: 0.05
+    number_of_intervals: 5000
+    note: "REQ-08: same u_x step at +10% speed; response must equal the zero-speed response within 1e-6 A."
+
+  zero_seq_2n:
+    model: DualThreePhaseMachine.Harnesses.ZeroSeq2N
+    overrides: {}
+    stop_time: 0.2
+    number_of_intervals: 4000
+    note: "REQ-09: neutral_config=TwoN; u_0 excited; i_0 must stay 0."
+
+  zero_seq_1n:
+    model: DualThreePhaseMachine.Harnesses.ZeroSeq1N
+    overrides: {}
+    stop_time: 0.05
+    number_of_intervals: 5000
+    note: "REQ-10: neutral_config=OneN; 1 V step on u_0; tau_0 = L_l/R_s."
+
+  accel_no_load:
+    model: DualThreePhaseMachine.Harnesses.ConstantTorque
+    overrides: {}
+    stop_time: 0.15
+    number_of_intervals: 3000
+    note: >
+      REQ-13: feed-forward + PI current regulator holds i_d=-5.02, i_q=10.24
+      (m_e=10.59 N.m), m_load=0, start at rest; omega_mech(0.1 s) ~ 105.47 rad/s.
+
+  free_decay:
+    model: DualThreePhaseMachine.Harnesses.ZeroTorqueDecay
+    overrides: {}
+    stop_time: 12
+    number_of_intervals: 6000
+    note: >
+      REQ-14: m_e held = 0 via back-EMF feed-forward (u_q = omega_k*psi_d keeps
+      i_q = 0), m_load = 0, omega_mech(0) = 100; decay to 36.79 rad/s at t=10 s.
+
+  free_decay_literal:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {i_d_start: 0.0, i_q_start: 0.0, m_load: 0.0, omega_mech_start: 100.0}
+    stop_time: 12
+    number_of_intervals: 6000
+    note: >
+      REQ-14 CONTROL: all voltages 0 with a PM rotor -> back-EMF drives i_q to
+      -9.7 A, m_e = -20.3 N.m, rotor brakes to 0 in ~0.13 s. Confirms a pure
+      open-circuit voltage source is NOT "zero electromagnetic torque".
+
+  # ------------------------------ edge cases -------------------------------
+  rated:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides:
+      i_d_start: -5.02
+      i_q_start: 10.24
+      omega_mech_start: 415.0943
+      m_load: 10.6
+      u_d: -225.8956       # R_s*i_d - omega_k*psi_q at the MTPA point
+      u_q: 185.6063        # R_s*i_q + omega_k*psi_d
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: "REQ-04, REQ-11, REQ-15 (residuals are algebraic => case-invariant)."
+
+  hot_winding:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {Rs: 1.114, i_d_start: -2.513, i_q_start: 5.0, omega_mech_start: 52.3599, m_load: 4.4981}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: "EDGE (ASM-7): R_s(120 C)=1.114 ohm. Re-checks parameter override, REQ-04, REQ-09."
+
+  over_speed:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {omega_mech_start: 456.6}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: "EDGE: +10% rated speed, all voltages 0. Re-checks REQ-08 and REQ-11."
+
+  over_load:
+    model: DualThreePhaseMachine.DualThreePhaseIPMSM
+    overrides: {m_load: 11.66}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: "EDGE: +10% load. Re-checks REQ-04, REQ-11, REQ-15."
+
+# ===========================================================================
+# Step 2 — VSD (generalised Clarke) + Park coordinate transforms (REQ-16..REQ-20)
+# Owner: sim-verifier. Models are the additive Step-2 harness package
+# `DualThreePhaseMachine.TransformChecks` (TransformChecks.mo; the plant
+# VSDTransform.mo / ParkTransform.mo files were NOT modified).
+#   TransformChecks.VSDCheck   -> REQ-16..REQ-19 (VSD)
+#   TransformChecks.ParkCheck  -> REQ-20        (Park)
+# These harnesses are static/analytic: every output is an algebraic function of
+# the swept electrical angle theta = omega*time (harness default omega = 2*pi
+# rad/s, i.e. 1 rev/s). requirements.yaml maps all of REQ-16..20 to one case
+# name, `vsd_check`; the Park requirement (REQ-20) is exercised by `park_check`.
+# ---------------------------------------------------------------------------
+
+  vsd_check:
+    model: DualThreePhaseMachine.TransformChecks.VSDCheck
+    overrides: {}
+    stop_time: 0.01
+    number_of_intervals: 2
+    note: >
+      REQ-16..REQ-19 as specified in requirements.yaml. Balanced symmetric
+      6-phase set (per-set amplitude A = 4.1 A, set 2 lagging 30 deg) at the
+      swept angle theta. CAVEAT: with omega = 2*pi the as-specified stop_time
+      of 0.01 s only sweeps theta = 0..0.0628 rad; the `vsd_check_full` case
+      below covers a full revolution.
+
+  vsd_check_full:
+    model: DualThreePhaseMachine.TransformChecks.VSDCheck
+    overrides: {}
+    stop_time: 1.0
+    number_of_intervals: 3600
+    note: >
+      REQ-16..REQ-19 diagnostic/edge: same harness over a full revolution
+      (theta = 0..2*pi, 3601 samples), so the subspace separation, the 30 deg
+      amplitude mapping and the angle tracking are exercised at all electrical
+      angles rather than at 3 points.
+
+  park_check:
+    model: DualThreePhaseMachine.TransformChecks.ParkCheck
+    overrides: {}
+    stop_time: 0.01
+    number_of_intervals: 2
+    note: >
+      REQ-20: Park orthonormality (park_roundtrip_err) and magnitude
+      preservation (amp_err); (alpha,beta) = A*(cos,sin) at the swept angle.
+      As-specified stop time.
+
+  park_check_full:
+    model: DualThreePhaseMachine.TransformChecks.ParkCheck
+    overrides: {}
+    stop_time: 1.0
+    number_of_intervals: 3600
+    note: >
+      REQ-20 diagnostic/edge: full revolution theta = 0..2*pi; verifies the
+      rotation stays orthonormal and magnitude-preserving for all rotor angles.
+
+# ===========================================================================
+# Step 3 — dual 2-level VSI (REQ-21..23) + full plant incl. rated point
+# (REQ-24..25) + full-plant smoke.
+# Owner: sim-verifier. Plant .mo files and Requirements/ were NOT modified.
+# ---------------------------------------------------------------------------
+# How the models are driven (interface notes):
+#   * DualThreePhaseInverter and PlantAssembly have UNCONNECTED top-level
+#     RealInput gates (s_a1..s_c2) and m_load. The runner's numeric `overrides`
+#     DO take effect on such inputs (proven: forced states reproduce Eq. (4)
+#     exactly), so no harness is needed for the 2N inverter or the plant smoke.
+#   * neutral_config is an enumeration and cannot be set through numeric
+#     overrides, so the 1N cases use the additive, test-only driver file
+#     Example/DualThreePhaseMachine/Tests/Step3Harnesses.mo (outside the
+#     package; no model file touched):
+#       - InverterAll64_2N / InverterAll64_1N: instantiate all 64 switching
+#         states in ONE run and report global max |u_ph|, max |per-set voltage
+#         sum| and max Eq.(4)/(5) residual.
+#       - RatedHold: feed-forward + PI dq current regulator at the MTPA pair
+#         (i_d=-5.02, i_q=10.24 A) with an exact speed-hold load BC
+#         (m_load = m_e - nu*omega_k) for REQ-24/25.
+# ===========================================================================
+
+  # ------------- VSI, all 64 switching states (REQ-21/22/23) -------------
+  vsi_states:
+    model: Step3Harnesses.InverterAll64_2N
+    file: Example/DualThreePhaseMachine/Tests/Step3Harnesses.mo
+    overrides: {}
+    stop_time: 0.01
+    number_of_intervals: 10
+    note: >
+      REQ-21/22/23: ALL 64 switching states, 2N @ u_dc=500 V. Global max |u_ph|
+      must be <= 2*u_dc/3 = 333.334 V, per-set sums 0, Eq.(4) residual <=1e-6.
+
+  vsi_all64_2n_low_dc:
+    model: Step3Harnesses.InverterAll64_2N
+    file: Example/DualThreePhaseMachine/Tests/Step3Harnesses.mo
+    overrides: {u_dc: 400.0}
+    stop_time: 0.01
+    number_of_intervals: 10
+    note: >
+      REQ-21/23 EDGE low_dc_link: ALL 64 states, 2N @ u_dc=400 V (-20%);
+      bound 2*400/3 = 266.667 V.
+
+  vsi_all64_1n:
+    model: Step3Harnesses.InverterAll64_1N
+    file: Example/DualThreePhaseMachine/Tests/Step3Harnesses.mo
+    overrides: {}
+    stop_time: 0.01
+    number_of_intervals: 10
+    note: >
+      REQ-23 1N: ALL 64 states, common neutral (Eq. 5) @ u_dc=500 V;
+      bound 5*u_dc/6 = 416.667 V (configuration-specific bound correction).
+
+  # -------- VSI, representative states S1..S6, exact Eq.(4) voltages --------
+  vsi_s1:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 0, s_b1: 0, s_c1: 0, s_a2: 0, s_b2: 0, s_c2: 0, u_dc: 500}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: "REQ-22 S1 (0,0,0,0,0,0) -> all u_ph = 0."
+
+  vsi_s2:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 1, s_b1: 0, s_c1: 0, s_a2: 0, s_b2: 0, s_c2: 0, u_dc: 500}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: "REQ-22 S2 (1,0,0,0,0,0) -> (333.333,-166.667,-166.667,0,0,0)."
+
+  vsi_s3:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 1, s_b1: 1, s_c1: 0, s_a2: 0, s_b2: 0, s_c2: 0, u_dc: 500}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: "REQ-22 S3 (1,1,0,0,0,0) -> (166.667,166.667,-333.333,0,0,0)."
+
+  vsi_s4:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 1, s_b1: 1, s_c1: 1, s_a2: 0, s_b2: 0, s_c2: 0, u_dc: 500}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: "REQ-22 S4 (1,1,1,0,0,0) -> all u_ph = 0."
+
+  vsi_s5:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 0, s_b1: 0, s_c1: 0, s_a2: 1, s_b2: 0, s_c2: 0, u_dc: 500}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: "REQ-22 S5 (0,0,0,1,0,0) -> (0,0,0,333.333,-166.667,-166.667)."
+
+  vsi_s6:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 1, s_b1: 1, s_c1: 1, s_a2: 1, s_b2: 1, s_c2: 1, u_dc: 500}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: "REQ-22 S6 all-ones -> all u_ph = 0."
+
+  low_dc_link:
+    model: DualThreePhaseMachine.DualThreePhaseInverter
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 1, s_b1: 0, s_c1: 0, s_a2: 0, s_b2: 0, s_c2: 0, u_dc: 400}
+    stop_time: 0.005
+    number_of_intervals: 5
+    note: >
+      EDGE low_dc_link: S2 @ u_dc=400 V -> (266.667,-133.333,-133.333,0,0,0);
+      re-checks REQ-21 sums, REQ-22 residual and the 266.667 V bound.
+
+  # ------------- rated / over-speed machine point (REQ-24/25) -------------
+  # NB: the Step-1 keys `rated`/`over_speed` already exist above (open-loop,
+  # fixed voltages). The Step-3, speed-held realisations use new keys.
+  rated_hold:
+    model: Step3Harnesses.RatedHold
+    file: Example/DualThreePhaseMachine/Tests/Step3Harnesses.mo
+    overrides: {omega_mech_ref: 415.0943}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      REQ-24/25: MTPA currents (i_d=-5.02, i_q=10.24 A) with PI current
+      regulator and speed held exactly at 415.0943 rad/s via the load BC
+      m_load = m_e - nu*omega_k. Expect m_e=10.6 N.m, P_mech=4400 W.
+
+  over_speed_hold:
+    model: Step3Harnesses.RatedHold
+    file: Example/DualThreePhaseMachine/Tests/Step3Harnesses.mo
+    overrides: {omega_mech_ref: 456.6}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      REQ-24 EDGE +10% speed (456.6 rad/s): torque must be the same 10.6 N.m
+      (speed-independent).
+
+  # ------------------------- full-plant smoke -----------------------------
+  plant_smoke:
+    model: DualThreePhaseMachine.PlantAssembly
+    file: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo
+    overrides: {s_a1: 1, s_b1: 0, s_c1: 0, s_a2: 0, s_b2: 0, s_c2: 0, m_load: 10.6, u_dc: 500}
+    stop_time: 0.1
+    number_of_intervals: 100
+    note: >
+      Full plant (inverter -> VSD -> Park -> machine -> inverse): fixed
+      switching state S2 + m_load=10.6 N.m, stopTime 0.1 s. Acceptance: LOG_SUCCESS
+      and all states finite. (Open-loop, no modulator -> large-signal transient;
+      not a controlled drive, smoke only.)

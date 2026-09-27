@@ -1,0 +1,28 @@
+system: Planar pendulum (CAD test example)
+model: Pendulum.SimplePendulum
+file: Example/ExampleCADTest/OpenModelica/Pendulum/package.mo
+
+requirements:
+  - id: REQ-T1
+    title: No energy creation
+    statement: The pendulum angle magnitude shall stay below 0.101 rad for the whole simulation.
+    metric: angle
+    criterion: {type: bounds, var: angle, lo: -0.101, hi: 0.101}
+    verification: {method: simulation, cases: [nominal]}
+    priority: must
+  - id: REQ-T2
+    title: Quarter-period zero crossing
+    statement: >
+      With L = 1 m, g = 9.81 m/s^2, the first time angle falls below 0 shall be
+      0.50 s +/- 2 % (0.49 s to 0.51 s), the quarter period T/4 = (2*pi*sqrt(L/g))/4.
+    metric: angle
+    criterion: {type: time_to_reach, var: angle, threshold: 0.0, direction: falling, min_time: 0.49, max_time: 0.51}
+    verification: {method: simulation, cases: [nominal]}
+    priority: must
+
+cases:
+  nominal:
+    overrides: {}
+    stop_time: 10
+    number_of_intervals: 2000   # output grid 0.005 s
+    note: "Nominal: default gravity (9.81 m/s^2 along -y), phi(start=0.1, fixed=true), L=1 m, m=1 kg."

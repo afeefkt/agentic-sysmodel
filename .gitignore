@@ -1,0 +1,13 @@
+# generated knowledge base (rebuild with tools/knowledge/*.py; private PDF extracts live here too)
+/knowledge/
+# OpenModelica build/sim artefacts
+.om_build/
+*_res.mat
+*.log
+# python
+.venv/
+__pycache__/
+# local tool caches
+.serena/
+# FreeCAD backups
+*.FCBak

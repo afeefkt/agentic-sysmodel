@@ -1,0 +1,29 @@
+{
+  "project": "Example/MiniRetraction",
+  "current_step": 1,
+  "step_name": "kinematics_only",
+  "iteration": 0,
+  "tuning_iterations": 0,
+  "status": "step1_verified",
+  "requirements": "Example/MiniRetraction/Requirements/requirements.yaml",
+  "architecture": "Example/MiniRetraction/architecture.md",
+  "recent_delegations": [
+    {"agent": "req-engineer", "result": "requirements.yaml written (8 REQs)"},
+    {"agent": "modelica-modeler", "result": "MiniRetraction.Kinematics built, check ok, smoke sim ok"},
+    {"agent": "sim-verifier", "result": "REQ-KIN-1..5 all PASS, report written"}
+  ],
+  "open_issues": [
+    "OQ-1 actuator technology unspecified (needed for step 3/4)",
+    "OQ-2 control law unspecified (needed for step 4)"
+  ],
+  "step_1": {
+    "scope": "kinematics only: slider-crank loop, arm 0->90 deg, actuator length",
+    "req_ids": ["REQ-KIN-1", "REQ-KIN-2", "REQ-KIN-3", "REQ-KIN-4", "REQ-KIN-5"],
+    "model_path": "Example/MiniRetraction/OpenModelica/MiniRetraction/package.mo",
+    "report_path": "Example/MiniRetraction/Results/verification_report.md",
+    "status": "verified_all_pass"
+  },
+  "step_2": {"scope": "loads: gravity torque, actuator force per angle", "status": "pending"},
+  "step_3": {"scope": "actuator + dynamics: REQ-T-1, REQ-F-1", "status": "pending"},
+  "step_4": {"scope": "control + edge cases: REQ-OS-1", "status": "pending"}
+}

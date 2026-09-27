@@ -1,0 +1,22 @@
+[project]
+name = "om-mcp"
+version = "0.1.0"
+description = "OpenModelica MCP server for agentic-sysmodel (built on omagent)"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2,<3",
+    "OMPython>=3.6",
+    "scipy>=1.10",
+    "numpy>=2.0",
+    "matplotlib>=3.8",
+    "openpyxl>=3.1",
+    "omagent",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+# pinned upstream commit (BSD-3-Clause); for local hacking on omagent use instead:
+# omagent = { path = "../../../external/omagent", editable = true }
+omagent = { git = "https://github.com/MasoudMiM/omagent", rev = "1be4cde52d9153bdfa3e94a115c554eed522e902" }

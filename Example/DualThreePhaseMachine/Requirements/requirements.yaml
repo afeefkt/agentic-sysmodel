@@ -1,0 +1,882 @@
+# ===========================================================================
+# Requirements — DualThreePhaseMachine plant model (ADT-IPMSM drive)
+# System requirement spec for the PLANT only:
+#   (1) asymmetrical dual three-phase IPMSM machine,
+#   (2) VSD (6-phase -> alpha-beta / xy / 0+ 0-) + Park coordinate transforms,
+#   (3) dual three-phase 2-level voltage source inverter (VSI).
+# OUT OF SCOPE: SVPWM modulator, PR current regulators, any closed-loop control.
+# ===========================================================================
+
+system: Dual three-phase IPMSM (ADT-IPMSM) plant model — 4.4 kW drive
+model: Example/DualThreePhaseMachine/OpenModelica/DualThreePhaseMachine/package.mo (class TBD by modelica-modeler)
+purpose: >
+  Provide an executable, requirement-verifiable plant model of a 4.4 kW
+  asymmetrical dual three-phase interior permanent-magnet synchronous machine
+  (two three-phase winding sets displaced by pi/6 rad = 30 deg electrical),
+  its dq/xy/0+0- VSD + Park coordinate transforms, and a 2-level dual
+  three-phase VSI. The plant is driven open-loop (voltage or current
+  prescribed at the dq/xy/0 terminals); it must reproduce the electromagnetic
+  and electro-mechanical behaviour of Eldeeb et al. (PEDS 2017), so that a
+  later SVPWM/current-control design can be verified against it.
+description: >
+  The machine is modelled in the rotating dq frame (energy-conversion
+  subspace), the xy frame (harmonic/unbalance subspace, leakage only) and the
+  two zero-sequence channels 0+, 0- (per winding set). The VSI is modelled by
+  the switching-state phase-voltage relation of Eq. (4); with isolated neutrals
+  (2N) the per-set phase voltages sum to zero, which blocks the zero-sequence
+  channel; with a common neutral (1N) the zero-sequence channel is energised.
+  Dynamics follow the paper's Eq. (3), neglecting magnetic saturation.
+
+scope:
+  in_scope:
+    - IPMSM dq flux/voltage dynamics, xy leakage dynamics, 0+/0- zero-sequence
+    - electromagnetic torque and mechanical rotor dynamics
+    - VSD 6-phase transform and Park transform (forward + inverse)
+    - 2-level VSI switching-state phase-voltage synthesis (Eq. 4), 2N and 1N
+  out_of_scope:
+    - SVPWM modulator / duty-cycle generation
+    - PR current regulators and any outer control loops
+    - magnetic saturation, eddy currents, iron losses, thermal network
+    - CAD / mass geometry (not required for an electromagnetic plant model)
+
+references:
+  - id: SRC-1
+    text: >
+      Eldeeb, H., et al., "A Unified SVPWM Realization for Minimizing
+      Circulating Currents of Dual Three Phase Machines", IEEE PEDS 2017.
+      Table I (machine parameters); Eq. (1) generalized Clarke (VSD) matrix;
+      Eq. (3) machine dynamic model; Eq. (4) VSI phase-voltage relation.
+  - id: SRC-2
+    text: >
+      System need (task brief to req-engineer): 4.4 kW ADT-IPMSM; plant =
+      machine + VSD/Park transforms + 2-level VSI; controller out of scope;
+      test bench run in generator mode at 500 rpm with reference current
+      i_k,ref = (-2.513, 5) A (d,q); VSI switched at 8 kHz.
+  - id: SRC-3
+    text: >
+      Standard VSD convention for asymmetrical six-phase machines (amplitude
+      scaling 1/3 on the alpha-beta and xy rows; per-set zero-sequence rows),
+      used to pin the reference transform. Scaling is an interface convention,
+      not a physical claim — see OQ-5.
+
+# ---------------------------------------------------------------------------
+# Assumptions (paper does not give these). ASSUMED vs SOURCED.
+# ---------------------------------------------------------------------------
+assumptions:
+  - id: ASM-1
+    text: >
+      DC-link voltage u_dc = 500 V. Not given in the paper. Chosen so that the
+      inverter has linear-range voltage headroom at the rated electrical speed
+      (peak phase back-EMF ~217 V at 1245 rad/s => need u_dc >= ~377 V).
+      Consequence: all Eq.(4) voltages are stated for u_dc = 500 V.
+    status: ASSUMED
+  - id: ASM-2
+    text: >
+      Rotor inertia J = 0.01 kg*m^2 (mechanical). Not given. Reasonable for a
+      few-kW small-frame machine. In the paper's equation (3) coordinate
+      (electrical speed omega_k) the inertia is Theta = J/n_p = 3.3333e-3
+      kg*m^2 (DER-6).
+    status: ASSUMED
+  - id: ASM-3
+    text: >
+      Viscous friction coefficient b = 1.0e-3 N*m*s/rad (mechanical), i.e.
+      nu = b/n_p = 3.3333e-4 N*m*s in Eq. (3). Not given. Gives mechanical time
+      constant J/b = 10 s and ~0.42 N*m friction at rated speed (~4 % of
+      rated torque).
+    status: ASSUMED
+  - id: ASM-4
+    text: >
+      Neglect magnetic saturation and cross-saturation: L_d, L_q, psi_pm are
+      constant (paper states the model is "neglecting saturation").
+    status: SOURCED (SRC-1, Eq. 3)
+  - id: ASM-5
+    text: >
+      The paper's reference current i_k,ref = (-2.513, 5) A is interpreted as
+      the peak d-q current pair in the bench test at 500 rpm (generator mode).
+    status: SOURCED (SRC-2)
+  - id: ASM-6
+    text: >
+      Two neutral configurations are modelled: 2N = isolated neutrals (per-set
+      zero-sequence blocked) and 1N = common neutral (zero-sequence enabled).
+      This follows the paper's 2N/1N discussion.
+    status: SOURCED (SRC-1, SRC-2)
+  - id: ASM-7
+    text: >
+      Winding temperature edge case: copper resistance at 120 degC is
+      1.393 x R at 20 degC using alpha_cu = 0.00393 /degC, so
+      R_s(120 degC) = 1.114 ohm. Temperature coefficient is a standard value,
+      not from the paper.
+    status: ASSUMED
+  - id: ASM-8
+    text: >
+      VSD reference transform uses amplitude scaling 1/3 on the first four rows
+      (alpha,beta,x,y) and 1/3 on the two zero-sequence rows, phase order
+      (a1,b1,c1,a2,b2,c2), spatial shift pi/6. Property: T*T^T = (1/3) I_6,
+      T^{-1} = 3 T^T (DER-8).
+    status: ASSUMED (standard convention; SRC-3)
+  - id: ASM-9
+    text: >
+      Plant is open-loop. dq/xy/0 inputs are prescribed voltages (or ideal
+      current sources where stated in a case); no SVPWM and no current
+      regulator are part of this model.
+    status: ASSUMED (SRC-2 scope)
+
+# ---------------------------------------------------------------------------
+# Derived quantities (closed-form from SOURCED parameters). Useful facts; not
+# independently imposed except where a requirement verifies them in the model.
+# ---------------------------------------------------------------------------
+derived:
+  - id: DER-1
+    text: "Rated mechanical speed omega_mech,rated = P_rated/m_rated = 4400/10.6 rad/s."
+    value_rad_s: 415.0943
+    value_rpm: 3963.9
+  - id: DER-2
+    text: "Rated electrical speed omega_k,rated = n_p * omega_mech,rated = 3 * 415.0943."
+    value_rad_s: 1245.283
+  - id: DER-3
+    text: >
+      Electrical time constants: tau_d = (L_l+L_d)/R_s = 6.4e-3/0.8 = 8.000e-3 s;
+      tau_q = (L_l+L_q)/R_s = 17.4e-3/0.8 = 21.750e-3 s;
+      tau_xy = tau_0 = L_l/R_s = 0.9e-3/0.8 = 1.125e-3 s.
+    tau_d_s: 8.000e-3
+    tau_q_s: 21.750e-3
+    tau_xy_s: 1.125e-3
+  - id: DER-4
+    text: >
+      At the bench reference point (i_d,i_q)=(-2.513, 5) A, with
+      psi_d=(L_l+L_d)i_d+psi_pm=0.1585168 Wb and psi_q=(L_l+L_q)i_q=0.087 Wb,
+      the paper's torque Eq. (3) gives
+      m_e = 1.5*n_p*(psi_d*i_q - psi_q*i_d) = 4.5505 N*m.
+      At 500 rpm (omega_mech = 52.3599 rad/s) mechanical power = 238.24 W.
+    m_e_Nm: 4.5505
+    P_mech_W: 238.24
+  - id: DER-5
+    text: >
+      Current required for the stated rated torque 10.6 N*m, from
+      m_e = 1.5*n_p*[psi_pm*i_q + (L_d-L_q)*i_d*i_q] = 4.5*i_q*(0.1746 - 0.011*i_d):
+      MTPA point is i_d ~ -5.02 A, i_q ~ 10.24 A, |i| ~ 11.41 A.
+      CONFLICT: Table I rates the machine at i_s,rated = 4.1 A, which cannot
+      produce 10.6 N*m (it yields ~3.2 N*m at i_d=0). See OQ-1.
+    mtpa_i_d_A: -5.02
+    mtpa_i_q_A: 10.24
+    mtpa_i_mag_A: 11.41
+    is_rated_from_table_A: 4.1
+  - id: DER-6
+    text: >
+      Coordinate mapping of mechanical parameters: Theta = J/n_p = 0.01/3 =
+      3.3333e-3 kg*m^2; nu = b/n_p = 1.0e-3/3 = 3.3333e-4 N*m*s, so that
+      Eq. (3) with omega_k = n_p*omega_mech is equivalent to
+      J*domega_mech/dt = m_e - (m_load + b*omega_mech).
+    Theta_kg_m2: 3.3333e-3
+    nu_Nms: 3.3333e-4
+  - id: DER-7
+    text: >
+      VSI Eq. (4) levels for u_dc = 500 V (ASM-1):
+      u_ph = (u_dc/3)*(2*s_k - sum of the other two states in the same set),
+      so possible leg voltages are {+2*u_dc/3, +u_dc/3, 0, -u_dc/3, -2*u_dc/3}
+      = {333.333, 166.667, 0, -166.667, -333.333} V; max |u_ph| = 2*u_dc/3.
+    two_thirds_udc_V: 333.3333
+    one_third_udc_V: 166.6667
+  - id: DER-8
+    text: >
+      Reference VSD matrix T (rows: alpha, beta, x, y, 0+, 0-), phase order
+      (a1,b1,c1,a2,b2,c2), entries = T[0]: (1/3)[1,-1/2,-1/2,sqrt3/2,-sqrt3/2,0];
+      T[1]: (1/3)[0,sqrt3/2,-sqrt3/2,1/2,1/2,-1];
+      T[2]: (1/3)[1,-1/2,-1/2,-sqrt3/2,sqrt3/2,0];
+      T[3]: (1/3)[0,-sqrt3/2,sqrt3/2,1/2,1/2,-1];
+      T[4]: (1/3)[1,1,1,0,0,0]; T[5]: (1/3)[0,0,0,1,1,1].
+      Properties: T*T^T = (1/3)*I_6 and T*(3*T^T) = I_6.
+    T:
+      - [ 0.3333333, -0.1666667, -0.1666667,  0.2886751, -0.2886751,  0.0      ]
+      - [ 0.0,        0.2886751, -0.2886751,  0.1666667,  0.1666667, -0.3333333]
+      - [ 0.3333333, -0.1666667, -0.1666667, -0.2886751,  0.2886751,  0.0      ]
+      - [ 0.0,       -0.2886751,  0.2886751,  0.1666667,  0.1666667, -0.3333333]
+      - [ 0.3333333,  0.3333333,  0.3333333,  0.0,        0.0,        0.0      ]
+      - [ 0.0,        0.0,        0.0,        0.3333333,  0.3333333,  0.3333333]
+  - id: DER-9
+    text: >
+      Park transform (amplitude-invariant): [i_d;i_q] = R(theta)*[i_alpha;i_beta]
+      with R = [[cos,sin],[-sin,cos]]; inverse uses R^T. R is orthonormal
+      (R*R^T = I_2) and preserves magnitude |i_dq| = |i_alpha,beta|.
+  - id: DER-10
+    text: "Mechanical power at the rated point: m_rated * omega_mech,rated = 10.6 * 415.0943 = 4399.999 W (equals P_rated)."
+
+# ---------------------------------------------------------------------------
+# Requirements. One "shall" per REQ; every REQ is numeric and mapped to a
+# simulation variable and to verification cases.
+# Variables are names the modeller must expose (proposed interface).
+# ===========================================================================
+requirements:
+  # ---------------------- Parameter fidelity (Table I) ---------------------
+  - id: REQ-01
+    title: Electrical parameter fidelity (R_s, L_d, L_q, L_l)
+    statement: >
+      The model shall expose the stator resistance and inductances as
+      R_s = 0.8 ohm, L_d = 5.5e-3 H, L_q = 16.5e-3 H, L_l = 0.9e-3 H, each
+      within 1e-6 relative.
+    rationale: Source-of-truth machine parameters (paper Table I). Any drift here invalidates every dynamic prediction.
+    source: SRC-1
+    metric: [machine.Rs, machine.Ld, machine.Lq, machine.Ll]
+    criterion: {type: final, var: machine.Rs, expected: 0.8, rtol: 1.0e-6}
+    criterion_note: >
+      Verify each parameter separately: machine.Ld -> 5.5e-3, machine.Lq ->
+      16.5e-3, machine.Ll -> 0.9e-3, all rtol 1e-6.
+    verification: {method: simulation, cases: [nominal, hot_winding]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-02
+    title: Magnetic and pole parameter fidelity (psi_pm, n_p)
+    statement: >
+      The model shall expose the PM flux linkage psi_pm = 174.6e-3 Wb (rtol
+      1e-6) and the pole-pair number n_p = 3 (exact integer).
+    rationale: psi_pm sets back-EMF and torque scale; n_p sets the mech/electrical speed ratio. Paper Table I.
+    source: SRC-1
+    metric: [machine.psi_pm, machine.np]
+    criterion: {type: final, var: machine.psi_pm, expected: 0.1746, rtol: 1.0e-6}
+    criterion_note: "Verify machine.np == 3 as a separate final criterion (rtol 0)."
+    verification: {method: simulation, cases: [nominal]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-03
+    title: Rating fidelity (i_s,rated, m_rated, P_rated)
+    statement: >
+      The model shall expose the ratings i_s,rated = 4.1 A, m_rated = 10.6 N*m,
+      P_rated = 4.4e3 W (rtol 1e-6) as named parameters.
+    rationale: >
+      Table I nameplate values used to define the rated operating point. NOTE:
+      i_s,rated = 4.1 A is not consistent with m_rated = 10.6 N*m under the
+      paper's own torque equation (see DER-5 and OQ-1); the inconsistency is
+      recorded, not resolved here.
+    source: SRC-1
+    metric: [machine.i_s_rated, machine.m_rated, machine.P_rated]
+    criterion: {type: final, var: machine.P_rated, expected: 4400.0, rtol: 1.0e-6}
+    criterion_note: "Verify machine.i_s_rated -> 4.1 and machine.m_rated -> 10.6 separately (rtol 1e-6)."
+    verification: {method: simulation, cases: [nominal]}
+    priority: must
+    status: not-verified
+
+  # ---------------------------- dq dynamics --------------------------------
+  - id: REQ-04
+    title: dq flux-linkage relations
+    statement: >
+      The model shall satisfy psi_d = (L_l+L_d)*i_d + psi_pm and
+      psi_q = (L_l+L_q)*i_q pointwise, i.e. the exposed residuals
+      res_psi_d and res_psi_q shall stay within +/- 1e-6 Wb at all times.
+    rationale: Eq. (3) flux definitions; leakage adds to the magnetising inductances. Algebraic, so the residual must be ~machine zero.
+    source: SRC-1
+    metric: [machine.res_psi_d, machine.res_psi_q]
+    criterion: {type: bounds, var: machine.res_psi_d, lo: -1.0e-6, hi: 1.0e-6}
+    criterion_note: "Second criterion: bounds on machine.res_psi_q, lo -1e-6, hi 1e-6."
+    verification: {method: simulation, cases: [nominal, rated, hot_winding, over_load]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-05
+    title: dq voltage equations at steady state
+    statement: >
+      At the bench point (i_d=-2.513 A, i_q=5 A, omega_k=157.0796 rad/s,
+      steady state), the model's applied dq voltages shall satisfy
+      u_d = R_s*i_d - omega_k*psi_q = -15.676 V and
+      u_q = R_s*i_q + omega_k*psi_d = 28.899 V, and the exposed residuals
+      res_dq_d = u_d - (R_s*i_d + dpsi_d/dt - omega_k*psi_q) and res_dq_q shall
+      stay within +/- 5e-3 V.
+    rationale: >
+      Eq. (3) dq voltage balance including the speed cross-coupling terms
+      (-omega_k*psi_q, +omega_k*psi_d); verifies the cross-coupling sign and
+      magnitude, not only the R*i drops.
+    source: SRC-1
+    metric: [machine.res_dq_d, machine.res_dq_q, machine.u_d, machine.u_q]
+    criterion: {type: bounds, var: machine.res_dq_d, lo: -5.0e-3, hi: 5.0e-3}
+    criterion_note: >
+      Verify machine.res_dq_q within +/-5e-3 V as a second criterion, and the
+      steady-state values with value_at: machine.u_d -> -15.676 V,
+      machine.u_q -> 28.899 V at the end of the run (tol 5e-3 V).
+    verification: {method: simulation, cases: [nominal]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-06
+    title: dq electrical time constants
+    statement: >
+      With the machine at rest (omega_k = 0), i(0)=0, and a 1 V step applied on
+      both u_d and u_q, the d-axis current shall reach 1.2416 A (within 1 %) at
+      t = 40 ms, corresponding to tau_d = (L_l+L_d)/R_s = 8.0 ms (5 tau), and
+      the q-axis current shall reach 1.2416 A (within 1 %) at t = 108.75 ms,
+      corresponding to tau_q = (L_l+L_q)/R_s = 21.75 ms (5 tau). Final value
+      magnitude shall be u/R_s = 1.25 A.
+    rationale: >
+      Verifies the dq inductances enter the dynamics with the correct time
+      constants L/R; a wrong (e.g. leakage-only) L would shift the settling.
+    source: SRC-1
+    metric: [machine.i_d, machine.i_q]
+    criterion: {type: value_at, var: machine.i_d, t: 0.04, expected: 1.2416, tol: 0.0124}
+    criterion_note: >
+      Second criterion: value_at machine.i_q at t = 0.10875 s expected 1.2416 A
+      tol 0.0124 A; third: final machine.i_d expected 1.25 A rtol 0.01.
+    verification: {method: simulation, cases: [open_loop_dq_step]}
+    priority: must
+    status: not-verified
+
+  # --------------------------- xy subspace ---------------------------------
+  - id: REQ-07
+    title: xy subspace is leakage-only and has tau_xy = L_l/R_s
+    statement: >
+      With omega_k = 0 and a 1 V step applied on u_x and u_y (dq not excited),
+      the x- and y-axis currents shall each rise to a final value u/R_s =
+      1.25 A (rtol 1 %) with time constant tau_xy = L_l/R_s = 1.125 ms; at
+      t = 5*tau_xy = 5.625 ms each current shall be 1.2416 A (within 1 %).
+    rationale: >
+      The xy subspace sees only leakage inductance (paper Eq. 3): u_x = R_s*i_x
+      + L_l*di_x/dt. A correct model must NOT use (L_l+L_d) or (L_l+L_q) here.
+    source: SRC-1
+    metric: [machine.i_x, machine.i_y]
+    criterion: {type: value_at, var: machine.i_x, t: 0.005625, expected: 1.2416, tol: 0.0124}
+    criterion_note: "Second criterion: value_at machine.i_y at t = 0.005625 s expected 1.2416 A tol 0.0124 A."
+    verification: {method: simulation, cases: [xy_injection]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-08
+    title: xy subspace has no PM-flux and no speed coupling
+    statement: >
+      With a rotating machine (omega_k up to 1245 rad/s) and dq/zero-sequence
+      excitation zero, a commanded u_x = u_y = 0 shall hold |i_x| and |i_y|
+      <= 1e-6 A at all times; changing the mechanical speed shall not change
+      the xy currents (no back-EMF term in the xy subspace). Equivalently the
+      xy current response to a u_x step shall be independent of omega_k.
+    rationale: >
+      Distinguishes the xy (harmonic) subspace from the alpha-beta/energy
+      subspace: the xy subspace links no rotor flux and has no speed-coupling
+      term, so it carries only leakage transients.
+    source: SRC-1
+    metric: [machine.i_x, machine.i_y]
+    criterion: {type: bounds, var: machine.i_x, lo: -1.0e-6, hi: 1.0e-6}
+    criterion_note: "Second criterion: bounds on machine.i_y, lo -1e-6, hi 1e-6; must hold also in over_speed."
+    verification: {method: simulation, cases: [xy_injection, over_speed]}
+    priority: must
+    status: not-verified
+
+  # ------------------------ zero-sequence subspace -------------------------
+  - id: REQ-09
+    title: Zero-sequence channel blocked by isolated neutrals (2N)
+    statement: >
+      In the 2N configuration (isolated neutrals), under balanced six-phase
+      operation the per-set zero-sequence currents shall remain
+      |i_0p| <= 1e-6 A and |i_0m| <= 1e-6 A at all times.
+    rationale: >
+      With isolated neutrals there is no return path, so the zero-sequence
+      (leakage-only) circuit carries no current. This is the property the
+      paper's SVPWM ultimately protects.
+    source: SRC-1
+    metric: [machine.i_0p, machine.i_0m]
+    criterion: {type: bounds, var: machine.i_0p, lo: -1.0e-6, hi: 1.0e-6}
+    criterion_note: "Second criterion: bounds on machine.i_0m, lo -1e-6, hi 1e-6."
+    verification: {method: simulation, cases: [zero_seq_2n, hot_winding]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-10
+    title: Zero-sequence channel enabled by common neutral (1N)
+    statement: >
+      In the 1N configuration (common neutral), a 1 V step on the
+      zero-sequence voltage u_0 shall drive the zero-sequence current to a
+      steady value u_0/R_s = 1.25 A (rtol 2 %) with time constant
+      tau_0 = L_l/R_s = 1.125 ms; at t = 5.625 ms i_0 shall be 1.2416 A
+      (within 2 %).
+    rationale: >
+      With a common neutral the zero-sequence loop closes through R_s and L_l
+      only (no back-EMF), so u_0 = R_s*i_0 + L_l*di_0/dt. Demonstrates the
+      contrast with the 2N case and that the zero-sequence path is modelled.
+    source: SRC-1
+    metric: [machine.i_0]
+    criterion: {type: value_at, var: machine.i_0, t: 0.005625, expected: 1.2416, tol: 0.0248}
+    criterion_note: "Second criterion: final machine.i_0 expected 1.25 A rtol 0.02."
+    verification: {method: simulation, cases: [zero_seq_1n]}
+    priority: must
+    status: not-verified
+
+  # --------------------------- torque equation -----------------------------
+  - id: REQ-11
+    title: Electromagnetic torque equation residual
+    statement: >
+      The exposed electromagnetic torque shall satisfy
+      m_e = (3/2)*n_p*(psi_d*i_q - psi_q*i_d) pointwise, i.e. the residual
+      res_me = m_e - (3/2)*n_p*(psi_d*i_q - psi_q*i_d) shall stay within
+      +/- 1e-6 N*m at all times.
+    rationale: Eq. (3) torque expression; algebraic consistency of the reported torque with the flux/current states.
+    source: SRC-1
+    metric: [machine.res_me, machine.m_e]
+    criterion: {type: bounds, var: machine.res_me, lo: -1.0e-6, hi: 1.0e-6}
+    verification: {method: simulation, cases: [nominal, rated, over_speed, over_load]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-12
+    title: Bench-point torque and mechanical power (generator, 500 rpm)
+    statement: >
+      At the paper's bench point (i_d = -2.513 A, i_q = 5 A, 500 rpm =
+      52.3599 rad/s, generator mode), the model's electromagnetic torque
+      magnitude shall be 4.550 N*m (within 1 %) and the mechanical power
+      magnitude |m_e*omega_mech| shall be 238.2 W (within 2 %).
+    rationale: >
+      Reproduces the bench operating point of the paper; also cross-checks
+      omega_mech = omega_k/n_p and the sign/magnitude convention for the
+      generator mode.
+    source: SRC-1
+    metric: [machine.m_e, machine.P_mech]
+    criterion: {type: final, var: machine.m_e, expected: 4.5505, rtol: 0.01}
+    criterion_note: >
+      Second criterion: final machine.P_mech (with magnitude convention) ->
+      238.24 W rtol 0.02, evaluated at omega_mech = 52.3599 rad/s.
+    verification: {method: simulation, cases: [nominal]}
+    priority: must
+    status: not-verified
+
+  # -------------------------- mechanical dynamics --------------------------
+  - id: REQ-13
+    title: Rotor inertia (mechanical dynamics)
+    statement: >
+      With constant electromagnetic torque m_e = 10.6 N*m (fixed dq currents),
+      zero load and initial omega_mech = 0, the mechanical speed shall reach
+      105.5 rad/s (within 2 %) at t = 0.1 s, consistent with
+      J*domega_mech/dt = m_e - b*omega_mech with J = 0.01 kg*m^2, b = 1.0e-3
+      N*m*s/rad (Theta = J/n_p, nu = b/n_p in Eq. (3)).
+    rationale: >
+      Verifies the inertia scaling between the electrical-speed form of Eq. (3)
+      and the mechanical speed, and that acceleration follows m_e/J, not e.g.
+      m_e/(n_p*J).
+    source: ASSUMED (ASM-2)
+    metric: [machine.omega_mech, mech.J, mech.b]
+    criterion: {type: value_at, var: machine.omega_mech, t: 0.1, expected: 105.47, tol: 2.109}
+    verification: {method: simulation, cases: [accel_no_load]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-14
+    title: Viscous friction time constant
+    statement: >
+      With zero electromagnetic torque (i_d = i_q = 0), zero load and initial
+      omega_mech = 100 rad/s, the mechanical speed shall decay to
+      36.79 rad/s (within 2 %) at t = 10 s, consistent with
+      omega_mech(t) = omega_mech(0)*exp(-t/(J/b)) and J/b = 10 s.
+    rationale: >
+      Verifies the viscous-friction (nu) term and the mechanical time constant.
+      Distinguishes friction from an offset load torque, which would give a
+      different decay.
+    source: ASSUMED (ASM-3)
+    metric: [machine.omega_mech, mech.b]
+    criterion: {type: value_at, var: machine.omega_mech, t: 10.0, expected: 36.788, tol: 0.736}
+    verification: {method: simulation, cases: [free_decay]}
+    priority: should
+    status: not-verified
+
+  - id: REQ-15
+    title: Mechanical power balance
+    statement: >
+      The exposed mechanical power shall satisfy
+      P_mech = m_e*omega_mech pointwise, i.e. res_power = P_mech -
+      m_e*omega_mech shall stay within +/- 1e-6 W at all times.
+    rationale: Consistency of the mechanical power reporting with the torque and speed states.
+    source: SRC-1
+    metric: [machine.res_power, machine.P_mech]
+    criterion: {type: bounds, var: machine.res_power, lo: -1.0e-6, hi: 1.0e-6}
+    verification: {method: simulation, cases: [rated, over_load]}
+    priority: should
+    status: not-verified
+
+  # --------------------------- VSD transform -------------------------------
+  - id: REQ-16
+    title: VSD transform orthogonality
+    statement: >
+      The 6x6 VSD transform T shall satisfy T*T^T = (1/3)*I_6, i.e. the
+      exposed scalar orth_err = max|T*T^T - (1/3)*I_6| shall be <= 1e-9.
+    rationale: >
+      The alpha-beta, xy and 0+/0- subspaces must be mutually orthogonal for the
+      decoupled machine model to be valid; a non-orthogonal transform mixes
+      energy-conversion and harmonic subspaces.
+    source: SRC-1 (Eq. 1) + SRC-3
+    metric: [vsd.T, vsd.orth_err]
+    criterion: {type: bounds, var: vsd.orth_err, lo: 0.0, hi: 1.0e-9}
+    verification: {method: analysis, cases: [vsd_check]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-17
+    title: VSD transform round-trip
+    statement: >
+      The inverse VSD transform shall satisfy T*(3*T^T) = I_6, i.e. the exposed
+      scalar roundtrip_err = max|T*(3*T^T) - I_6| shall be <= 1e-9; applying
+      VSD then inverse VSD to an arbitrary 6-vector shall recover the input
+      within 1e-9 A.
+    rationale: Forward and inverse transforms must be exact inverses so that phase quantities and subspace quantities are interchangeable without loss.
+    source: SRC-1 (Eq. 1) + SRC-3
+    metric: [vsd.roundtrip_err]
+    criterion: {type: bounds, var: vsd.roundtrip_err, lo: 0.0, hi: 1.0e-9}
+    verification: {method: analysis, cases: [vsd_check]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-18
+    title: VSD subspace separation for a balanced six-phase set
+    statement: >
+      For a balanced, symmetric six-phase set (both winding sets amplitude
+      A = 4.1 A, second set lagging 30 deg) the VSD outputs shall be
+      |i_x| <= 1e-6 A, |i_y| <= 1e-6 A, |i_0p| <= 1e-6 A and
+      |i_0m| <= 1e-6 A at all times, while |i_alpha,beta| carries the set.
+    rationale: >
+      A purely balanced six-phase excitation must map entirely into the
+      alpha-beta (energy-conversion) subspace with zero harmonic and zero
+      zero-sequence content; any leakage into xy/0 indicates a transform error.
+    source: SRC-1 (Eq. 1)
+    metric: [vsd.i_x, vsd.i_y, vsd.i_0p, vsd.i_0m]
+    criterion: {type: bounds, var: vsd.i_x, lo: -1.0e-6, hi: 1.0e-6}
+    criterion_note: "Additionally bound vsd.i_y, vsd.i_0p, vsd.i_0m each within +/-1e-6 A."
+    verification: {method: analysis, cases: [vsd_check]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-19
+    title: VSD 30-degree shift and alpha-beta amplitude mapping
+    statement: >
+      With the reference transform (DER-8) and a balanced six-phase set of
+      per-set amplitude A = 4.1 A and 30 deg spatial displacement, the VSD
+      shall produce i_alpha = A*cos(theta) and i_beta = A*sin(theta); the peak
+      alpha-beta magnitude shall be 4.1 A (within 1 %) and the angle of
+      (i_alpha, i_beta) shall be theta within 1e-3 rad.
+    rationale: >
+      Pins the 30 deg (pi/6 rad) spatial offset and the amplitude scaling of the
+      reference transform, so that a later SVPWM implementation and the plant
+      share the same convention. See OQ-5 on the scaling convention.
+    source: SRC-1 (Eq. 1) + SRC-3
+    metric: [vsd.i_alpha, vsd.i_beta]
+    criterion: {type: final, var: vsd.i_alpha_amp, expected: 4.1, rtol: 0.01}
+    criterion_note: "Also verify the phase: atan2(i_beta,i_alpha) tracks theta within 1e-3 rad."
+    verification: {method: analysis, cases: [vsd_check]}
+    priority: must
+    status: not-verified
+
+  # --------------------------- Park transform ------------------------------
+  - id: REQ-20
+    title: Park transform orthonormality and round-trip
+    statement: >
+      The Park transform R = [[cos(theta), sin(theta)],[-sin(theta), cos(theta)]]
+      shall satisfy R*R^T = I_2 (park_roundtrip_err <= 1e-9) and preserve
+      magnitude, |i_dq| = |i_alpha,beta| within 1e-6 A, for all rotor angles
+      theta.
+    rationale: >
+      The Park transform must be a pure rotation so that dq and alpha-beta
+      quantities represent the same physical current vector; a scaling or sign
+      error corrupts torque production.
+    source: SRC-1 (Eq. 1 / standard Park)
+    metric: [vsd.park_roundtrip_err]
+    criterion: {type: bounds, var: vsd.park_roundtrip_err, lo: 0.0, hi: 1.0e-9}
+    criterion_note: "Second criterion: bounds on |i_dq| - |i_alpha,beta| within +/-1e-6 A."
+    verification: {method: analysis, cases: [vsd_check]}
+    priority: must
+    status: not-verified
+
+  # ------------------------------ Inverter ---------------------------------
+  - id: REQ-21
+    title: VSI per-set phase voltages sum to zero (2N)
+    statement: >
+      For every switching state the per-set phase voltages of Eq. (4) shall sum
+      to zero: |u_a1+u_b1+u_c1| <= 1e-6 V and |u_a2+u_b2+u_c2| <= 1e-6 V.
+    rationale: >
+      Eq. (4) with 2N (isolated neutrals) has no zero-sequence degree of
+      freedom, so each three-phase set must be voltage-sum zero. This is the
+      inverter-side statement of REQ-09.
+    source: SRC-1 (Eq. 4)
+    metric: [inv.sum_set1, inv.sum_set2]
+    criterion: {type: bounds, var: inv.sum_set1, lo: -1.0e-6, hi: 1.0e-6}
+    criterion_note: "Second criterion: bounds on inv.sum_set2 within +/-1e-6 V."
+    verification: {method: simulation, cases: [vsi_states, low_dc_link, hot_winding]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-22
+    title: VSI Eq. (4) representative switching states
+    statement: >
+      The inverter shall reproduce Eq. (4),
+      u_ph,k = (u_dc/3)*(2*s_k - s_j1 - s_j2) (j1,j2 the other legs of the same
+      set), for the representative states below, with the exposed residual
+      uph_err = max over states/phases of |u_ph - Eq.(4)| <= 1e-6 V, and shall
+      yield the exact phase voltages for u_dc = 500 V:
+        S1 s=(0,0,0, 0,0,0) -> (0, 0, 0, 0, 0, 0) V
+        S2 s=(1,0,0, 0,0,0) -> (333.333, -166.667, -166.667, 0, 0, 0) V
+        S3 s=(1,1,0, 0,0,0) -> (166.667, 166.667, -333.333, 0, 0, 0) V
+        S4 s=(1,1,1, 0,0,0) -> (0, 0, 0, 0, 0, 0) V
+        S5 s=(0,0,0, 1,0,0) -> (0, 0, 0, 333.333, -166.667, -166.667) V
+        S6 s=(1,1,1, 1,1,1) -> (0, 0, 0, 0, 0, 0) V
+    rationale: >
+      Direct check of the inverter voltage synthesis in Eq. (4) for active,
+      zero and all-on states, including the independence of the two winding
+      sets. The residual is defined against the model's own u_dc so it is
+      case-invariant.
+    source: SRC-1 (Eq. 4)
+    metric: [inv.uph_err, inv.u_ph]
+    criterion: {type: bounds, var: inv.uph_err, lo: 0.0, hi: 1.0e-6}
+    criterion_note: >
+      Also value_at check each phase of S2 (e.g. inv.u_ph_1 -> 333.333 V,
+      inv.u_ph_2 -> -166.667 V, tol 1e-3 V).
+    verification: {method: simulation, cases: [vsi_states, low_dc_link]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-23
+    title: VSI output voltage bounds (neutral-configuration dependent)
+    statement: >
+      Over all 64 switching states, every phase-voltage magnitude shall not
+      exceed the neutral-configuration-specific bound: in the 2N (isolated
+      neutrals) configuration |u_ph| <= 2*u_dc/3 (Eq. 4, = 333.334 V at
+      u_dc = 500 V); in the 1N (common neutral) configuration |u_ph| <= 5*u_dc/6
+      (Eq. 5, = 416.667 V at u_dc = 500 V).
+    rationale: >
+      The 2-level VSI line-to-neutral magnitude is bounded by 2*u_dc/3 with
+      isolated neutrals (Eq. 4). With a common neutral (Eq. 5) the bound widens
+      to 5*u_dc/6, so the limit MUST be configuration-specific; a larger value
+      than the applicable bound indicates a scaling error.
+    source: SRC-1 (Eq. 4, Eq. 5)
+    metric: [inv.uph_max_abs, inv.u_dc]
+    criterion: {type: bounds, var: inv.uph_max_abs, lo: 0.0, hi: 333.334}
+    criterion_note: >
+      2N bound is 2*u_dc/3 (333.334 V at 500 V; 266.667 V at the 400 V low_dc_link
+      case). 1N bound is 5*u_dc/6 (416.667 V at 500 V). Evaluate inv.uph_max_abs
+      per configuration against its own limit.
+    verification: {method: simulation, cases: [vsi_states, low_dc_link]}
+    priority: must
+    status: not-verified
+
+  # --------------------------- Rated operating point -----------------------
+  - id: REQ-24
+    title: Rated electromagnetic torque at the rated operating point
+    statement: >
+      At the rated operating point (omega_mech = 415.0943 rad/s, currents set
+      to the MTPA pair i_d = -5.02 A, i_q = 10.24 A, DER-5), the model's
+      electromagnetic torque shall be 10.6 N*m (within 2 %). The torque is
+      speed-independent, so the same value shall hold in the over_speed case.
+    rationale: >
+      Nameplate rated torque (Table I). The required current is MTPA-derived
+      because i_s,rated = 4.1 A cannot produce 10.6 N*m under Eq. (3) (OQ-1).
+    source: SRC-1
+    metric: [machine.m_e]
+    criterion: {type: final, var: machine.m_e, expected: 10.6, rtol: 0.02}
+    verification: {method: simulation, cases: [rated, over_speed]}
+    priority: must
+    status: not-verified
+
+  - id: REQ-25
+    title: Rated mechanical power
+    statement: >
+      At the rated operating point the model's mechanical power
+      P_mech = m_e*omega_mech shall be 4400 W (within 2 %) at
+      omega_mech = 415.0943 rad/s.
+    rationale: Nameplate rated power (Table I); consistency of the rated torque-speed-power triple.
+    source: SRC-1
+    metric: [machine.P_mech]
+    criterion: {type: value_at, var: machine.P_mech, t: 0.5, expected: 4400.0, tol: 88.0}
+    verification: {method: simulation, cases: [rated]}
+    priority: must
+    status: not-verified
+
+  # --------------------------- Acceptance gate -----------------------------
+  - id: REQ-26
+    title: Modelica check and smoke simulation gate
+    statement: >
+      The plant model shall pass openmodelica_check (translation returns "ok")
+      and a smoke simulation of stop_time = 0.1 s shall complete with the
+      final simulation time equal to 0.1 s (rtol 1e-6) and all state variables
+      finite. No requirement in this file shall be claimed verified until this
+      gate passes.
+    rationale: >
+      Repo rule: a model is only "done" when it checks and a smoke simulation
+      runs. This is the precondition for all other verification.
+    source: ASSUMED (repo AGENTS.md rule 4)
+    metric: [time]
+    criterion: {type: final, var: time, expected: 0.1, rtol: 1.0e-6}
+    verification: {method: simulation, cases: [smoke]}
+    priority: must
+    status: not-verified
+
+# ---------------------------------------------------------------------------
+# Verification cases. Nominal + edge. Edge cases are explicit parameter
+# overrides. Residual/case-invariant requirements are re-checked under edges;
+# absolute-value requirements are checked in the case that defines the point.
+# ---------------------------------------------------------------------------
+cases:
+  nominal:
+    overrides: {}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      Bench operating point (SRC-2): generator mode at 500 rpm
+      (omega_mech = 52.3599 rad/s, omega_k = 157.0796 rad/s), dq reference
+      currents i_d = -2.513 A, i_q = 5 A, m_load set to hold the speed.
+      Default parameters: u_dc = 500 V (ASM-1), J = 0.01 (ASM-2), b = 1e-3
+      (ASM-3), 2N configuration. Verifies REQ-01..REQ-05, REQ-11, REQ-12.
+
+  rated:
+    overrides: {machine.i_d: -5.02, machine.i_q: 10.24, machine.omega_mech: 415.0943, mech.m_load: 10.6}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      Rated operating point. Currents are the MTPA pair from DER-5, NOT Table I
+      i_s,rated = 4.1 A, because 4.1 A cannot yield 10.6 N*m under Eq. (3)
+      (OQ-1). Verifies REQ-04, REQ-11, REQ-15, REQ-24, REQ-25.
+
+  open_loop_dq_step:
+    overrides: {machine.omega_mech: 0.0, machine.u_d: 1.0, machine.u_q: 1.0, machine.i_d_start: 0.0, machine.i_q_start: 0.0}
+    stop_time: 0.2
+    number_of_intervals: 4000
+    note: >
+      Machine at rest (omega_k = 0), 1 V step on u_d and u_q, initial currents
+      zero. Verifies REQ-06 (tau_d = 8.0 ms, tau_q = 21.75 ms).
+
+  xy_injection:
+    overrides: {machine.omega_mech: 0.0, machine.u_x: 1.0, machine.u_y: 1.0, machine.u_d: 0.0, machine.u_q: 0.0}
+    stop_time: 0.05
+    number_of_intervals: 5000
+    note: >
+      Machine at rest, 1 V step on u_x and u_y only, dq and zero-sequence
+      unexcited. Verifies REQ-07 (tau_xy = 1.125 ms) and the xy part of REQ-08.
+
+  zero_seq_2n:
+    overrides: {neutral_config: "2N"}
+    stop_time: 0.2
+    number_of_intervals: 4000
+    note: "Isolated neutrals. Balanced operation; per-set zero-sequence blocked. Verifies REQ-09."
+
+  zero_seq_1n:
+    overrides: {neutral_config: "1N", machine.u_0: 1.0, machine.omega_mech: 0.0}
+    stop_time: 0.05
+    number_of_intervals: 5000
+    note: >
+      Common neutral; 1 V step on the zero-sequence voltage u_0. Zero-sequence
+      loop is R_s + L_l only, tau_0 = 1.125 ms, final i_0 = 1.25 A.
+      Verifies REQ-10.
+
+  vsi_states:
+    overrides: {inv.u_dc: 500.0}
+    stop_time: 0.01
+    number_of_intervals: 100
+    note: >
+      Representative switching states S1..S6 of REQ-22 applied as an
+      enumeration/analytic sweep (no PWM). Eq. (4) voltages checked; per-set
+      sums zero; bounds <= 333.334 V. Verifies REQ-21, REQ-22, REQ-23.
+
+  vsd_check:
+    overrides: {}
+    stop_time: 0.01
+    number_of_intervals: 2
+    note: >
+      Analytic/static check of the reference VSD matrix (DER-8) and Park
+      matrix (DER-9): orthogonality, round-trip, subspace separation and the
+      30 deg amplitude mapping, for a balanced set A = 4.1 A. Verifies
+      REQ-16..REQ-20.
+
+  accel_no_load:
+    overrides: {machine.i_d: -5.02, machine.i_q: 10.24, mech.m_load: 0.0, machine.omega_mech_start: 0.0}
+    stop_time: 0.15
+    number_of_intervals: 3000
+    note: >
+      Constant m_e = 10.6 N*m, no load, start at rest. Verifies REQ-13
+      (omega_mech(0.1 s) = 105.47 rad/s).
+
+  free_decay:
+    overrides: {machine.i_d: 0.0, machine.i_q: 0.0, mech.m_load: 0.0, machine.omega_mech_start: 100.0}
+    stop_time: 12
+    number_of_intervals: 6000
+    note: "Zero torque, zero load, initial 100 rad/s. Verifies REQ-14 (tau = J/b = 10 s)."
+
+  smoke:
+    overrides: {}
+    stop_time: 0.1
+    number_of_intervals: 100
+    note: "Translation check (openmodelica_check) + short smoke run. Verifies REQ-26 only."
+
+  # ----------------------------- Edge cases --------------------------------
+  hot_winding:
+    overrides: {machine.Rs: 1.114}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      EDGE: winding at 120 degC, R_s = 1.393 * 0.8 = 1.114 ohm (ASM-7).
+      Re-checks parameter override (REQ-01), flux residual (REQ-04),
+      2N zero-sequence blocking (REQ-09) and inverter sums (REQ-21).
+
+  low_dc_link:
+    overrides: {inv.u_dc: 400.0}
+    stop_time: 0.01
+    number_of_intervals: 100
+    note: >
+      EDGE: DC link -20 % (400 V). Re-checks inverter sums (REQ-21), Eq. (4)
+      residual (REQ-22) and the case-specific bound |u_ph| <= 2*400/3 =
+      266.667 V (REQ-23).
+
+  over_speed:
+    overrides: {machine.omega_mech: 456.6}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      EDGE: +10 % rated mechanical speed (456.6 rad/s). Re-checks xy
+      independence (REQ-08), torque-equation residual (REQ-11) and rated
+      torque value (REQ-24, speed-independent).
+
+  over_load:
+    overrides: {mech.m_load: 11.66}
+    stop_time: 0.5
+    number_of_intervals: 5000
+    note: >
+      EDGE: +10 % load torque (11.66 N*m). Re-checks flux residual (REQ-04),
+      torque-equation residual (REQ-11) and power balance (REQ-15).
+
+# ---------------------------------------------------------------------------
+# Open questions for the design authority before the model is frozen.
+# ---------------------------------------------------------------------------
+open_questions:
+  - id: OQ-1
+    text: >
+      CONFLICT IN TABLE I: i_s,rated = 4.1 A cannot produce m_rated = 10.6 N*m
+      under the paper's Eq. (3) (it yields ~3.2 N*m at i_d = 0, or ~3.3 N*m with
+      optimal i_d). The MTPA current for 10.6 N*m is ~11.4 A (DER-5). Either
+      i_s,rated is not the torque-producing current (e.g. per-set RMS, or a
+      different base), or m_rated is not reached at rated current. Requirement
+      REQ-24 therefore uses the DER-5 current and this must be confirmed.
+  - id: OQ-2
+    text: >
+      DC-link voltage u_dc is not given. ASSUMED 500 V (ASM-1). Confirm the
+      actual bench DC link, especially since it sets the inverter voltage
+      headroom at rated speed and every Eq.(4) number in REQ-22/REQ-23.
+  - id: OQ-3
+    text: >
+      Rotor inertia J and viscous friction b are not given. ASSUMED J = 0.01
+      kg*m^2 and b = 1e-3 N*m*s/rad (ASM-2/ASM-3). Confirm from the bench
+      hardware/datasheet; REQ-13 and REQ-14 depend entirely on these.
+  - id: OQ-4
+    text: >
+      Is the paper's reference current (-2.513, 5) A the peak dq current pair
+      (ASM-5)? Its magnitude 5.60 A exceeds the stated 4.1 A rated current,
+      which reinforces OQ-1. Clarify the current base (peak/RMS, per-set/total).
+  - id: OQ-5
+    text: >
+      The VSD scaling convention (1/3 amplitude scaling, T*T^T = (1/3)I_6) is a
+      standard convention (SRC-3), not reproduced verbatim from the paper. If
+      the paper uses a different normalisation, REQ-16..REQ-19 thresholds
+      (which pin T) must be rescaled. Confirm the exact Eq.(1) matrix.
+  - id: OQ-6
+    text: >
+      Zero-sequence parameterisation: the model exposes i_0p/i_0m (two channels)
+      while some references use a single i_0. Confirm the intended convention
+      and whether the 1N model should inject u_0+ and u_0- symmetrically.
+  - id: OQ-7
+    text: >
+      Load torque profile in the nominal/rated cases: a constant m_load is
+      assumed to hold the speed. Confirm whether the bench uses a prime mover
+      (generator mode) with a speed controller, which would change the
+      mechanical boundary condition.
+  - id: OQ-8
+    text: >
+      Iron losses, eddy currents, magnetic saturation and temperature-dependent
+      PM flux are all neglected. Confirm none of the acceptance criteria depend
+      on these effects.

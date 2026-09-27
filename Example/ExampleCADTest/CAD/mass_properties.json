@@ -1,0 +1,25 @@
+{
+  "document": "ExampleCADTest",
+  "part": "Box",
+  "material": "Aluminium",
+  "density_kg_m3": 2700,
+  "dimensions_mm": {
+    "x": 100,
+    "y": 50,
+    "z": 20
+  },
+  "mass_kg": 0.26999999999999996,
+  "centre_of_mass_m": {
+    "x": 0.05000000000000002,
+    "y": 0.02500000000000001,
+    "z": 0.01
+  },
+  "inertia_about_com_kg_m2": {
+    "Ixx": 6.524999999999993e-05,
+    "Iyy": 0.0002339999999999999,
+    "Izz": 0.00028124999999999955,
+    "Ixy": 1.6093254089355468e-19,
+    "Ixz": 0.0,
+    "Iyz": 0.0
+  }
+}

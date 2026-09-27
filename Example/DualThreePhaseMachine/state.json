@@ -1,0 +1,21 @@
+{
+  "project": "DualThreePhaseMachine",
+  "source": "Eldeeb et al., IEEE PEDS 2017 (eldeeb-2017-a.pdf)",
+  "scope": "B - machine + VSD/Park transforms + 2-level VSI (controller out of scope)",
+  "current_step": 3,
+  "steps": [
+    {"id": 1, "name": "core machine DualThreePhaseIPMSM", "reqs": ["REQ-01", "REQ-15", "REQ-26"], "status": "verified (all PASS)"},
+    {"id": 2, "name": "VSDTransform + ParkTransform", "reqs": ["REQ-16", "REQ-20"], "status": "verified (all PASS)"},
+    {"id": 3, "name": "DualThreePhaseInverter + PlantAssembly", "reqs": ["REQ-21", "REQ-25"], "status": "verified (all PASS)"}
+  ],
+  "iteration_count": 0,
+  "tuning_iterations": 0,
+  "open_issues": [
+    "OQ-1: Table I current/torque inconsistency (4.1 A -> ~3.2 Nm, not 10.6 Nm). Decision: faithful Eq.3, MTPA current for rated check.",
+    "OQ-2: u_dc assumed 500 V",
+    "OQ-3: J=0.01, b=1e-3 assumed",
+    "OQ-4: current base (peak/RMS) ambiguity",
+    "OQ-5: VSD scaling convention (1/3 amplitude)"
+  ],
+  "verification_status": "all 26 REQs PASS (Steps 1-3 verified)"
+}

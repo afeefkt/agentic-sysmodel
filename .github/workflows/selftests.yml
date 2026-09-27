@@ -1,0 +1,44 @@
+name: selftests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  om-mcp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenModelica (omc)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          curl -fsSL https://build.openmodelica.org/apt/openmodelica.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/openmodelica-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/openmodelica-keyring.gpg] https://build.openmodelica.org/apt $(. /etc/os-release; echo $VERSION_CODENAME) release" \
+            | sudo tee /etc/apt/sources.list.d/openmodelica.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends omc
+          omc --version
+
+      - name: Install Modelica Standard Library
+        run: |
+          echo 'installPackage(Modelica); getErrorString();' > /tmp/i.mos
+          omc /tmp/i.mos
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Basic tools (check / simulate / override / verify)
+        working-directory: tools/om_mcp
+        run: uv run python selftest.py
+
+      - name: Analysis + control tools (analytic references)
+        working-directory: tools/om_mcp
+        run: uv run python selftest_control.py
+
+      - name: Library discovery + diagram gate
+        working-directory: tools/om_mcp
+        run: uv run python selftest_library.py

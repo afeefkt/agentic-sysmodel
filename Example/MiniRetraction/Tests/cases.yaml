@@ -1,0 +1,22 @@
+# Verification cases for MiniRetraction.Kinematics (kinematics-only, step 1)
+# Model under test: Example/MiniRetraction/OpenModelica/MiniRetraction/package.mo
+# Design point: model defaults (no Results/parameters.json present at time of run).
+#   d_OA=0.3, r_OB=0.15, armLen=0.5, phi_start=0, phi_end=pi/2, swing_time=3
+model: MiniRetraction.Kinematics
+file: Example/MiniRetraction/OpenModelica/MiniRetraction/package.mo
+design_point:
+  d_OA: 0.3
+  r_OB: 0.15
+  armLen: 0.5
+  phi_start: 0.0
+  phi_end: 1.5707963267948966
+  swing_time: 3.0
+cases:
+  nominal:
+    overrides: {}
+    stop_time: 6
+    number_of_intervals: 3000   # dt = 0.002 s, resolves the 3 s swing
+    verifies: [REQ-KIN-1, REQ-KIN-2, REQ-KIN-3, REQ-KIN-4, REQ-KIN-5]
+    note: >
+      Arm prescribed 0 -> pi/2 rad (0 -> 90 deg) over 3 s, then held.
+      Kinematics only: no gravity, no forces.
