@@ -102,4 +102,7 @@ Example/<Project>/       Requirements/, CAD/, OpenModelica/, Results/, Tests/, P
 **Built here:** the multi-agent process and prompts, the OpenModelica MCP server (analysis, control, library-discovery and diagram-quality tools), the skills and knowledge-base pipeline, the requirement-driven verification workflow and the examples.
 **Built on:** [omagent](https://github.com/MasoudMiM/omagent) (BSD-3) for the omc session and verifiers, [freecad-mcp](https://github.com/neka-nat/freecad-mcp) (MIT), OpenModelica and the Modelica Standard Library. See [NOTICE.md](NOTICE.md).
 
+## License
+This project's own code is released under the [MIT License](LICENSE). Upstream components keep their own licenses (see [NOTICE.md](NOTICE.md)).
+
 > Simulation results are engineering estimates from models with documented assumptions (marked ASSUMED vs SOURCED). They are not certified data.
